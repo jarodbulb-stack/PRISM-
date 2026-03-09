@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' https:; script-src 'self' 'unsafe-eval' 'unsafe-inline' https://www.gstatic.com https://apis.google.com https://www.googleapis.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.gstatic.com; img-src 'self' data: https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; frame-src https://accounts.google.com;">
     <!-- Firebase Performance: DNS prefetch + preconnect -->
     <link rel="dns-prefetch" href="//www.gstatic.com">
     <link rel="dns-prefetch" href="//firestore.googleapis.com">
@@ -3299,6 +3300,7 @@
     </div>
     <div class="mt-sa-nav">
         <button class="mt-sa-nav-btn active" onclick="mtSATab('overview', this)">Overview</button>
+        <button class="mt-sa-nav-btn" onclick="mtSATab('allowlist', this);mtSALoadAllowlist()">🔐 Access Control</button>
         <button class="mt-sa-nav-btn" onclick="mtSATab('orgs', this)">Organizations</button>
         <button class="mt-sa-nav-btn" onclick="mtSATab('users', this)">All Users</button>
     </div>
@@ -3332,7 +3334,59 @@
             </div>
         </div>
         <!-- Users Tab -->
-        <div id="mt-sa-users" style="display:none;">
+        <div id="mt-sa-allowlist" style="display:none;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
+            <h3 style="margin:0;color:#f1f5f9;">🔐 Access Control — Allowed Users</h3>
+            <button onclick="mtSALoadAllowlist()" style="padding:8px 18px;background:rgba(99,102,241,0.15);border:1px solid #6366f1;color:#818cf8;border-radius:8px;cursor:pointer;font-size:0.85rem;font-weight:700;">🔄 Refresh</button>
+        </div>
+
+        <!-- Pending approvals -->
+        <div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:12px;padding:16px;margin-bottom:20px;">
+            <div style="font-size:0.8rem;font-weight:700;color:#fbbf24;letter-spacing:0.1em;margin-bottom:12px;">⏳ PENDING APPROVAL</div>
+            <div id="sa-pending-list" style="display:flex;flex-direction:column;gap:8px;">
+                <div style="color:#64748b;font-size:0.85rem;">Loading...</div>
+            </div>
+        </div>
+
+        <!-- All users -->
+        <div style="background:#0f172a;border:1px solid #1e293b;border-radius:12px;padding:16px;">
+            <div style="font-size:0.8rem;font-weight:700;color:#94a3b8;letter-spacing:0.1em;margin-bottom:12px;">👥 ALL REGISTERED USERS</div>
+            <div id="sa-allowlist-table" style="overflow-x:auto;">
+                <div style="color:#64748b;font-size:0.85rem;">Loading...</div>
+            </div>
+        </div>
+
+        <!-- Add user manually -->
+        <div style="background:#0f172a;border:1px solid #1e293b;border-radius:12px;padding:20px;margin-top:20px;">
+            <div style="font-size:0.85rem;font-weight:700;color:#94a3b8;margin-bottom:14px;">➕ ADD USER MANUALLY</div>
+            <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;">
+                <div style="flex:1;min-width:180px;">
+                    <label style="font-size:0.75rem;color:#64748b;display:block;margin-bottom:4px;">Email</label>
+                    <input id="sa-add-email" type="email" placeholder="user@email.com" style="width:100%;padding:9px 12px;background:rgba(255,255,255,0.05);border:1px solid #334155;border-radius:8px;color:#f1f5f9;font-size:0.85rem;box-sizing:border-box;"/>
+                </div>
+                <div style="min-width:130px;">
+                    <label style="font-size:0.75rem;color:#64748b;display:block;margin-bottom:4px;">Role</label>
+                    <select id="sa-add-role" style="width:100%;padding:9px 12px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#f1f5f9;font-size:0.85rem;">
+                        <option value="owner">Owner</option>
+                        <option value="admin">Admin</option>
+                        <option value="manager">Manager</option>
+                        <option value="cashier" selected>Cashier</option>
+                        <option value="viewer">Viewer</option>
+                    </select>
+                </div>
+                <div style="min-width:130px;">
+                    <label style="font-size:0.75rem;color:#64748b;display:block;margin-bottom:4px;">Status</label>
+                    <select id="sa-add-status" style="width:100%;padding:9px 12px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#f1f5f9;font-size:0.85rem;">
+                        <option value="approved" selected>Approved</option>
+                        <option value="pending">Pending</option>
+                    </select>
+                </div>
+                <button onclick="mtSAAddUser()" style="padding:9px 20px;background:linear-gradient(135deg,#3b82f6,#6366f1);border:none;border-radius:8px;color:#fff;font-size:0.85rem;font-weight:700;cursor:pointer;white-space:nowrap;">Add User</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="mt-sa-users" style="display:none;">
             <table class="mt-org-table">
                 <thead><tr><th>Name</th><th>Email</th><th>Organization</th><th>Role</th><th>Joined</th></tr></thead>
                 <tbody id="mt-sa-users-tbody"></tbody>
@@ -6865,7 +6919,7 @@
                 const dot = document.getElementById('firebase-header-dot');
                 if (dot) { dot.style.background = '#10b981'; dot.title = 'Firebase: Connected ✅'; }
 
-try{if(firebase.firestore.persistentLocalCache){firestore.settings({localCache:firebase.firestore.persistentLocalCache({tabManager:firebase.firestore.persistentMultipleTabManager()})});}else{firestore.enablePersistence({synchronizeTabs:true}).catch(()=>{});}}catch(e){}
+try{if(firebase.firestore&&firebase.firestore.persistentLocalCache){firestore.settings({localCache:firebase.firestore.persistentLocalCache({tabManager:firebase.firestore.persistentMultipleTabManager()})});}}catch(e){}
 
                 // Auth state listener
                 auth.onAuthStateChanged(async (user) => {
@@ -10514,7 +10568,7 @@ async function recordTenantPayment(tenantId) {
                 <form id="tenant-payment-form" onsubmit="saveTenantPayment(event, ${tenantId})">
                     <div class="form-group">
                         <label>Tenant</label>
-                        <input type="text" value="${tenant.name}" disabled>
+                        <input type="text" id="view-tenant-name" value="${tenant.name}" disabled>
                     </div>
                     <div class="form-group">
                         <label>Amount (₱)</label>
@@ -14036,7 +14090,7 @@ async function showPayrollSummary() {
                 <form id="credit-payment-form" onsubmit="saveCreditPayment(event, ${creditId})">
                     <div class="form-group">
                         <label>Debtor</label>
-                        <input type="text" value="${credit.debtor}" disabled>
+                        <input type="text" id="view-credit-debtor" value="${credit.debtor}" disabled>
                     </div>
                     <div class="form-group">
                         <label>Amount (₱)</label>
@@ -14827,7 +14881,7 @@ async function showPayrollSummary() {
                 <form onsubmit="saveClientCharge(event, '${type}', ${id})">
                     <div class="form-group">
                         <label>Client</label>
-                        <input type="text" value="${name}" disabled>
+                        <input type="text" id="view-name-field" value="${name}" disabled>
                     </div>
                     <div class="form-group">
                         <label>Charge Type</label>
@@ -19119,22 +19173,40 @@ Lender/Manager
             
             const container = document.getElementById('user-list');
             
+            const _myRole   = currentAppUser?.role;
+            const _myEmail  = (currentAppUser?.email||'').toLowerCase();
+            const _orgOwner = (MT.currentOrg?.ownerEmail||'').toLowerCase();
+            const _isSA     = MT.SUPER_ADMINS?.map(e=>e.toLowerCase()).includes(_myEmail);
+            const _canAdmin = ['admin','owner'].includes(_myRole) || _isSA;
+
+            // ── REQ6: Transfer Ownership button (owner/admin only) ──
+            const transferBtn = _canAdmin
+                ? `<div style="margin-bottom:14px;padding:12px 14px;background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.2);border-radius:10px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+                       <div><div style="font-size:0.82rem;font-weight:700;color:#fbbf24;">🔄 Transfer Ownership</div><div style="font-size:0.75rem;color:#64748b;margin-top:2px;">Current owner: ${MT.currentOrg?.ownerEmail||'—'}</div></div>
+                       <button onclick="hideModal('user-management-modal');showTransferOwnershipModal()" style="padding:7px 16px;background:rgba(245,158,11,0.15);border:1px solid #f59e0b;color:#fbbf24;border-radius:7px;cursor:pointer;font-size:0.8rem;font-weight:700;white-space:nowrap;">Transfer →</button>
+                   </div>` : '';
+
             if (users.length === 0) {
-                container.innerHTML = '<p style="color: var(--text-secondary);">No users found.</p>';
+                container.innerHTML = transferBtn + '<p style="color: var(--text-secondary);">No users found.</p>';
             } else {
-                container.innerHTML = users.map(u => `
-                    <div class="list-item">
-                        <div class="list-item-content">
-                            <div class="list-item-title">👤 ${u.fullname}</div>
-                            <div class="list-item-subtitle">@${u.username} • ${u.role}</div>
-                        </div>
-                        <div>
-                            <button class="btn btn-sm btn-secondary" onclick="editAppUser(${u.id})">Edit</button>
-                            ${u.role !== 'admin' || users.filter(x => x.role === 'admin').length > 1 ? 
-                                `<button class="btn btn-sm btn-danger" onclick="deleteAppUser(${u.id})">Delete</button>` : ''}
-                        </div>
-                    </div>
-                `).join('');
+                container.innerHTML = transferBtn + users.map(function(u) {
+                    var uEmail   = (u.email||'').toLowerCase();
+                    var isOwner  = uEmail && uEmail === _orgOwner;
+                    var isSelf   = (uEmail && uEmail === _myEmail) || u.username === (currentAppUser && currentAppUser.username);
+                    var canDel   = _canAdmin && !isOwner && !isSelf;
+                    var ownerTag = isOwner ? ' <span style="font-size:0.7rem;background:rgba(245,158,11,0.15);border:1px solid #f59e0b;color:#fbbf24;padding:1px 6px;border-radius:4px;">OWNER</span>' : '';
+                    var selfTag  = isSelf  ? ' <span style="font-size:0.7rem;background:rgba(99,102,241,0.15);border:1px solid #6366f1;color:#818cf8;padding:1px 6px;border-radius:4px;">YOU</span>' : '';
+                    var editBtn  = _canAdmin ? '<button class="btn btn-sm btn-secondary" onclick="editAppUser(' + u.id + ')">Edit</button>' : '';
+                    var delBtn   = canDel   ? '<button class="btn btn-sm btn-danger" onclick="deleteAppUser(' + u.id + ')">Delete</button>' : '';
+                    var lockBadge = (isOwner && !canDel) ? '<span style="font-size:0.75rem;color:#64748b;padding:4px 8px;">🔒 Protected</span>' : '';
+                    return '<div class="list-item">' +
+                        '<div class="list-item-content">' +
+                            '<div class="list-item-title">👤 ' + u.fullname + ownerTag + selfTag + '</div>' +
+                            '<div class="list-item-subtitle">@' + u.username + ' • ' + u.role + (u.email ? ' • ' + u.email : '') + '</div>' +
+                        '</div>' +
+                        '<div style="display:flex;gap:6px;">' + editBtn + delBtn + lockBadge + '</div>' +
+                    '</div>';
+                }).join('');
             }
             
             showModal('user-management-modal');
@@ -19202,10 +19274,28 @@ Lender/Manager
                 return;
             }
             
+            // ── SECURITY: Only admin/owner can save users ──
+            const _cu = currentAppUser;
+            const _cr = _cu && _cu.role;
+            if (!_cr || (!['admin','owner'].includes(_cr) && !MT.SUPER_ADMINS?.includes(_cu.email))) {
+                showToast('❌ Only Admin or Owner can manage users.', 'error'); return;
+            }
+
             if (editId) {
                 // Edit existing user
                 const index = users.findIndex(u => u.id === parseInt(editId));
                 if (index !== -1) {
+                    // REQ3: Prevent self role/status change
+                    const targetUser = users[index];
+                    const isSelf = targetUser.username === _cu.username || targetUser.email === _cu.email;
+                    if (isSelf && targetUser.role !== role) {
+                        showToast('❌ You cannot change your own role. Ask another admin.', 'error'); return;
+                    }
+                    // REQ5: Prevent removing org owner
+                    const orgOwnerEmail = MT.currentOrg?.ownerEmail;
+                    if (orgOwnerEmail && targetUser.email === orgOwnerEmail && role !== 'owner' && role !== 'admin') {
+                        showToast('❌ Organization owner role cannot be downgraded. Transfer ownership first.', 'error'); return;
+                    }
                     users[index].fullname = fullname;
                     users[index].username = username;
                     if (password) users[index].password = password;
@@ -19218,7 +19308,6 @@ Lender/Manager
                     showToast('❌ Username already exists. Choose a different username.', 'error');
                     return;
                 }
-                
                 const newUser = {
                     id: Date.now(),
                     fullname,
@@ -19270,6 +19359,26 @@ Lender/Manager
 
         // Delete App User
         async function deleteAppUser(id) {
+            // ── SECURITY REQ 5: Owner deletion protection ──
+            const _allUsers = JSON.parse(localStorage.getItem('prism_app_users') || '[]');
+            const _targetUser = _allUsers.find(u => u.id === id);
+            if (_targetUser) {
+                // Cannot delete self
+                if (currentAppUser && (_targetUser.username === currentAppUser.username || _targetUser.email === currentAppUser.email)) {
+                    showToast('❌ You cannot delete your own account.', 'error'); return;
+                }
+                // Cannot delete org owner
+                const orgOwnerEmail = MT.currentOrg?.ownerEmail;
+                if (orgOwnerEmail && _targetUser.email === orgOwnerEmail) {
+                    showToast('❌ Organization owner cannot be removed. Transfer ownership first.', 'error'); return;
+                }
+                // Only admin/owner can delete
+                const _myRole = currentAppUser?.role;
+                if (!['admin','owner'].includes(_myRole)) {
+                    showToast('❌ Only Admin or Owner can delete users.', 'error'); return;
+                }
+            }
+
             if (!await showConfirm('This user account will be permanently removed and they will no longer be able to log in.', 'danger', '🗑️ Delete User', 'Yes, Delete')) return;
             
             let users = JSON.parse(localStorage.getItem('prism_app_users') || '[]');
@@ -22771,8 +22880,19 @@ async function mtRegister() {
             const el = document.getElementById(id);
             if (el) el.value = '';
         });
+        // ── SECURITY: Self-register in allowlist as pending ──
+        const _isSAEmail = MT.SUPER_ADMINS.map(e=>e.toLowerCase()).includes(email.toLowerCase());
+        if (!_isSAEmail) {
+            // Create pending entry keyed by Firebase UID — required for Firestore RLS rules
+            await PRISM_SECURITY.selfRegister(email, null, userCred.user.uid);
+            // Sign them out immediately — they need approval first
+            try { await firebase.auth().signOut(); } catch(e) {}
+            mtShowAuthSuccess('✅ Registration received! Your account is pending administrator approval. You will be notified once approved.');
+            setBusy(false);
+            return; // Don't proceed to setup
+        }
         // For super admin emails — navigate directly, don't wait for onAuthStateChanged
-        const isSA = MT.SUPER_ADMINS.map(e=>e.toLowerCase()).includes(email.toLowerCase());
+        const isSA = _isSAEmail;
         if (isSA) {
             MT.currentUser = userCred.user;
             mtToast('✅ Super Admin account ready!', 'success');
@@ -23141,6 +23261,21 @@ async function mtLaunchOrg() {
     const phone = document.getElementById('mt-setup-phone')?.value?.trim() || '';
     
     if (!orgName) { mtToast('Organization name is required', 'error'); return; }
+
+    // ── SECURITY: Only approved owner/admin can create orgs ──
+    if (MT.currentUser && !MT.SUPER_ADMINS.map(e=>e.toLowerCase()).includes((MT.currentUser.email||'').toLowerCase())) {
+        const _secCheck = await PRISM_SECURITY.checkAllowlist(MT.currentUser.email);
+        if (!_secCheck.allowed) {
+            PRISM_SECURITY.showDenyScreen(_secCheck.reason, MT.currentUser.email);
+            return;
+        }
+        const _role = (_secCheck.data && _secCheck.data.role) || 'viewer';
+        if (!['owner','admin'].includes(_role)) {
+            mtToast('❌ Only Owner or Admin can create organizations.', 'error');
+            if (btn) { btn.disabled = false; btn.textContent = '🚀 Launch PRISM'; }
+            return;
+        }
+    }
     
     const btn = document.getElementById('mt-launch-btn');
     if (btn) { btn.disabled = true; btn.textContent = '⏳ Creating...'; }
@@ -23154,6 +23289,7 @@ async function mtLaunchOrg() {
         address: address,
         phone: phone,
         ownerId: MT.currentUser?.uid || 'local',
+        owner_uid: MT.currentUser?.uid || 'local',   // REQ1: explicit owner field
         ownerEmail: MT.currentUser?.email || '',
         ownerName: MT.currentUser?.displayName || '',
         status: 'active',
@@ -23298,12 +23434,11 @@ function mtSwitchOrg(orgId) {
 
 // ---- Super Admin ----
 function mtSATab(tab, btn) {
-    ['mt-sa-overview','mt-sa-orgs','mt-sa-users'].forEach(t => {
+    ['mt-sa-overview','mt-sa-orgs','mt-sa-users','mt-sa-allowlist'].forEach(t => {
         const el = document.getElementById(t);
         if (el) el.style.display = 'none';
     });
     document.querySelectorAll('.mt-sa-nav-btn').forEach(b => b.classList.remove('active'));
-    
     const target = document.getElementById(`mt-sa-${tab}`);
     if (target) target.style.display = 'block';
     if (btn) btn.classList.add('active');
@@ -23375,7 +23510,8 @@ function mtRenderSAOrgs(orgs) {
 }
 
 async function mtSADeleteOrg(orgId, orgName) {
-    if (!await showConfirm(`Delete organization "${orgName}"? All their data will be permanently removed. This cannot be undone.`, 'danger', '🗑️ Delete Organization', 'Yes, Delete')) return;
+    // REQ5: Super admin can delete orgs but warn if deleting an active org
+    if (!await showConfirm(`Delete organization "${orgName}"? All members will lose access and all data will be permanently removed. This cannot be undone.`, 'danger', '🗑️ Delete Organization', 'Yes, Delete Forever')) return;
     try {
         if (window.db) await window.db.collection(MT.ORGS_COL).doc(orgId).delete();
         // Also remove from member list
@@ -24077,8 +24213,29 @@ async function mtInit() {
             if (user) {
                 MT.currentUser = user;
 
+                // ── SECURITY GATE: Allowlist check (skip for super admins) ──
+                const _isSuperAdmin = MT.SUPER_ADMINS.map(e=>e.toLowerCase()).includes((user.email||'').toLowerCase());
+                if (!_isSuperAdmin) {
+                    let _dbWait = 0;
+                    while (!window.db && _dbWait < 20) { await new Promise(r=>setTimeout(r,300)); _dbWait++; }
+                    const _check = await PRISM_SECURITY.checkAllowlist(user.email, user.uid);
+                    if (!_check.allowed) {
+                        mtHideLoading();
+                        PRISM_SECURITY.showDenyScreen(_check.reason, user.email);
+                        return;
+                    }
+                    // Stamp uid onto the allowlist doc if missing (ensures RLS rules work)
+                    if (_check.data && !_check.data.uid && window.db) {
+                        try { await window.db.collection(PRISM_SECURITY.COLLECTION)
+                            .doc(user.uid).update({ uid: user.uid }); } catch(e) {}
+                    }
+                    MT._securityData = _check.data || null;
+                } else {
+                    PRISM_SECURITY.ensureSuperAdminEntry(user.email);
+                }
+
                 // Super admin → SA panel
-                if (MT.SUPER_ADMINS.map(e=>e.toLowerCase()).includes((user.email||'').toLowerCase())) {
+                if (_isSuperAdmin || MT.SUPER_ADMINS.map(e=>e.toLowerCase()).includes((user.email||'').toLowerCase())) {
                     const sOrg = localStorage.getItem('mt_current_org');
                     if (sOrg) { try { MT.currentOrg = JSON.parse(sOrg); } catch(e) {} }
                     MT.currentOrgRole = localStorage.getItem('mt_current_org_role') || 'owner';
@@ -24349,6 +24506,508 @@ window.mtSAToggleOrgStatus=mtSAToggleOrgStatus;
                 });
             }
         });
+
+
+        
+        // ╔══════════════════════════════════════════════════════╗
+        // ║         PRISM SECURITY LAYER v1.0                   ║
+        // ║  Allowlist · Approval Gate · Role Control            ║
+        // ║  Org Isolation · Admin Management                    ║
+        // ╚══════════════════════════════════════════════════════╝
+
+        const PRISM_SECURITY = {
+            COLLECTION: 'prism_allowed_users',   // Firestore collection
+            ROLES: ['owner','admin','manager','cashier','viewer'],
+            STATUSES: ['pending','approved','suspended'],
+
+            // ── Check if email is on the allowlist ──
+            async checkAllowlist(email, uid = null) {
+                if (!email || !window.db) return { allowed: false, reason: 'no_db' };
+                try {
+                    const emailKey = email.toLowerCase().trim();
+                    const firebaseUid = uid || (window.auth && window.auth.currentUser && window.auth.currentUser.uid);
+
+                    // Step 1: Try UID-keyed doc first (the RLS-compatible path)
+                    if (firebaseUid) {
+                        const uidDoc = await window.db.collection(PRISM_SECURITY.COLLECTION).doc(firebaseUid).get();
+                        if (uidDoc.exists) {
+                            const data = uidDoc.data();
+                            if (data.status === 'pending')   return { allowed: false, reason: 'pending',   data };
+                            if (data.status === 'suspended') return { allowed: false, reason: 'suspended', data };
+                            if (data.status === 'approved')  return { allowed: true,  reason: 'approved',  data, id: uidDoc.id };
+                            return { allowed: false, reason: 'unknown_status', data };
+                        }
+                    }
+
+                    // Step 2: Fall back to email query (admin pre-added before user registered)
+                    const snap = await window.db.collection(PRISM_SECURITY.COLLECTION)
+                        .where('email', '==', emailKey).get();
+                    if (snap.empty) return { allowed: false, reason: 'not_registered' };
+
+                    const doc = snap.docs[0];
+                    const data = doc.data();
+
+                    // Step 3: Migrate — stamp UID onto the doc so future lookups use UID key
+                    // If doc ID is not a UID (i.e. it's an auto-ID), re-create it with UID as key
+                    if (firebaseUid && doc.id !== firebaseUid && data.status === 'approved') {
+                        try {
+                            await window.db.collection(PRISM_SECURITY.COLLECTION).doc(firebaseUid).set({
+                                ...data, uid: firebaseUid, migrated_at: new Date().toISOString(),
+                            });
+                            await doc.ref.delete(); // Remove the old auto-ID doc
+                            console.info('[Security] Allowlist doc migrated to UID key:', firebaseUid);
+                        } catch(me) { console.warn('[Security] Migration failed (non-critical):', me); }
+                    }
+
+                    if (data.status === 'pending')   return { allowed: false, reason: 'pending',   data };
+                    if (data.status === 'suspended') return { allowed: false, reason: 'suspended', data };
+                    if (data.status === 'approved')  return { allowed: true,  reason: 'approved',  data, id: doc.id };
+                    return { allowed: false, reason: 'unknown_status', data };
+
+                } catch(e) {
+                    console.warn('[Security] Allowlist check failed:', e);
+                    if (MT.SUPER_ADMINS.map(x=>x.toLowerCase()).includes(email.toLowerCase())) {
+                        return { allowed: true, reason: 'super_admin_bypass' };
+                    }
+                    return { allowed: false, reason: 'db_error' };
+                }
+            },
+
+            // ── Self-register: creates pending entry ──
+            async selfRegister(email, orgId = null, uid = null) {
+                if (!window.db) return false;
+                try {
+                    const emailKey = email.toLowerCase().trim();
+                    // If we have the UID, use it as the document ID (required for RLS rules)
+                    if (uid) {
+                        const ref = window.db.collection(PRISM_SECURITY.COLLECTION).doc(uid);
+                        const existing = await ref.get();
+                        if (existing.exists) return { exists: true, data: existing.data() };
+                        await ref.set({
+                            email: emailKey,
+                            uid: uid,
+                            status: 'pending',
+                            role: 'viewer',
+                            organization_id: orgId,
+                            created_at: new Date().toISOString(),
+                            requested_at: new Date().toISOString(),
+                        });
+                        return { created: true };
+                    }
+                    // Fallback: check by email (pre-registered by admin without UID yet)
+                    const snap = await window.db.collection(PRISM_SECURITY.COLLECTION)
+                        .where('email', '==', emailKey).get();
+                    if (!snap.empty) return { exists: true, data: snap.docs[0].data() };
+                    // No UID and no existing entry — create with auto-ID (will be migrated on first login)
+                    await window.db.collection(PRISM_SECURITY.COLLECTION).add({
+                        email: emailKey,
+                        status: 'pending',
+                        role: 'viewer',
+                        organization_id: orgId,
+                        created_at: new Date().toISOString(),
+                        requested_at: new Date().toISOString(),
+                    });
+                    return { created: true };
+                } catch(e) {
+                    console.warn('[Security] Self-register failed:', e);
+                    return { error: e.message };
+                }
+            },
+
+            // ── Approve a user ──
+            async approveUser(docId, role, orgId) {
+                if (!window.db) return false;
+                await window.db.collection(PRISM_SECURITY.COLLECTION).doc(docId).update({
+                    status: 'approved',
+                    role: role || 'viewer',
+                    organization_id: orgId || null,
+                    approved_at: new Date().toISOString(),
+                });
+            },
+
+            // ── Suspend a user ──
+            async suspendUser(docId) {
+                if (!window.db) return false;
+                await window.db.collection(PRISM_SECURITY.COLLECTION).doc(docId).update({
+                    status: 'suspended',
+                    suspended_at: new Date().toISOString(),
+                });
+            },
+
+            // ── Update role ──
+            async updateRole(docId, role) {
+                if (!window.db) return false;
+                await window.db.collection(PRISM_SECURITY.COLLECTION).doc(docId).update({ role });
+            },
+
+            // ── Get all pending users ──
+            async getPendingUsers() {
+                if (!window.db) return [];
+                const snap = await window.db.collection(PRISM_SECURITY.COLLECTION)
+                    .where('status', '==', 'pending').get();
+                return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            },
+
+            // ── Get all users (for admin panel) ──
+            async getAllUsers() {
+                if (!window.db) return [];
+                const snap = await window.db.collection(PRISM_SECURITY.COLLECTION)
+                    .orderBy('created_at', 'desc').get();
+                return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            },
+
+            // ── Deny access with a friendly screen ──
+            showDenyScreen(reason, email) {
+                const msgs = {
+                    not_registered: { icon:'🚫', title:'Access Not Granted', msg:`<b>${email||'Your email'}</b> is not registered in this system.<br><br>Please contact the administrator to request access.` },
+                    pending:        { icon:'⏳', title:'Awaiting Approval',   msg:`Your account is awaiting administrator approval.<br><br>You will be notified once approved.` },
+                    suspended:      { icon:'🔒', title:'Account Suspended',   msg:`Your account has been suspended.<br><br>Contact the administrator for assistance.` },
+                    db_error:       { icon:'⚠️', title:'Connection Error',    msg:`Could not verify your access. Please check your connection and try again.` },
+                    default:        { icon:'❌', title:'Access Denied',       msg:`You do not have permission to access this system.` },
+                };
+                const m = msgs[reason] || msgs.default;
+                // Remove existing deny screen
+                const existing = document.getElementById('prism-deny-screen');
+                if (existing) existing.remove();
+                const div = document.createElement('div');
+                div.id = 'prism-deny-screen';
+                div.innerHTML = `
+                    <div style="position:fixed;inset:0;z-index:99999;background:rgba(8,12,28,0.97);display:flex;align-items:center;justify-content:center;padding:20px;">
+                        <div style="background:#0f172a;border:1px solid #1e293b;border-radius:20px;padding:48px 36px;max-width:440px;width:100%;text-align:center;box-shadow:0 40px 80px rgba(0,0,0,0.8);">
+                            <div style="font-size:3rem;margin-bottom:16px;">${m.icon}</div>
+                            <h2 style="color:#f1f5f9;margin:0 0 16px 0;font-size:1.4rem;">${m.title}</h2>
+                            <p style="color:#94a3b8;margin:0 0 32px 0;line-height:1.7;font-size:0.9rem;">${m.msg}</p>
+                            <button onclick="firebase.auth().signOut().then(()=>{document.getElementById('prism-deny-screen').remove();prismGoToSplash&&prismGoToSplash();mtShowLanding&&mtShowLanding();})"
+                                style="padding:12px 32px;background:rgba(99,102,241,0.15);border:1px solid #6366f1;color:#818cf8;border-radius:10px;cursor:pointer;font-size:0.9rem;font-weight:700;">
+                                ← Back to Login
+                            </button>
+                        </div>
+                    </div>`;
+                document.body.appendChild(div);
+                // Also sign out of Firebase silently
+                try { if(window.auth) window.auth.signOut(); } catch(e){}
+            },
+
+            // ── Ensure super admins always have an allowed_users entry ──
+            async ensureSuperAdminEntry(email) {
+                if (!window.db) return;
+                try {
+                    const uid = window.auth && window.auth.currentUser && window.auth.currentUser.uid;
+                    const emailKey = email.toLowerCase();
+                    if (uid) {
+                        // Use UID as doc key for RLS compatibility
+                        const ref = window.db.collection(PRISM_SECURITY.COLLECTION).doc(uid);
+                        const existing = await ref.get();
+                        if (!existing.exists) {
+                            await ref.set({
+                                email: emailKey, uid,
+                                status: 'approved', role: 'owner',
+                                organization_id: null,
+                                created_at: new Date().toISOString(),
+                                is_super_admin: true,
+                            });
+                        } else if (!existing.data().uid) {
+                            // Patch uid field if missing
+                            await ref.update({ uid, is_super_admin: true });
+                        }
+                    } else {
+                        // Fallback: email query
+                        const snap = await window.db.collection(PRISM_SECURITY.COLLECTION)
+                            .where('email', '==', emailKey).get();
+                        if (snap.empty) {
+                            await window.db.collection(PRISM_SECURITY.COLLECTION).add({
+                                email: emailKey, status: 'approved', role: 'owner',
+                                organization_id: null, created_at: new Date().toISOString(),
+                                is_super_admin: true,
+                            });
+                        }
+                    }
+                } catch(e) { console.warn('[Security] ensureSuperAdminEntry failed:', e); }
+            },
+        };
+
+        window.PRISM_SECURITY = PRISM_SECURITY;
+
+
+        
+        // ══ PRISM ALLOWLIST ADMIN FUNCTIONS ══
+
+        async function mtSALoadAllowlist() {
+            const pendingEl = document.getElementById('sa-pending-list');
+            const tableEl   = document.getElementById('sa-allowlist-table');
+            if (pendingEl) pendingEl.innerHTML = '<div style="color:#64748b;font-size:0.85rem;">Loading...</div>';
+            if (tableEl)   tableEl.innerHTML   = '<div style="color:#64748b;font-size:0.85rem;">Loading...</div>';
+            try {
+                const users = await PRISM_SECURITY.getAllUsers();
+                const pending = users.filter(u => u.status === 'pending');
+                const statusColors = { approved:'#34d399', pending:'#fbbf24', suspended:'#f87171' };
+                const roleColors   = { owner:'#a78bfa', admin:'#60a5fa', manager:'#34d399', cashier:'#fbbf24', viewer:'#94a3b8' };
+                if (pendingEl) {
+                    pendingEl.innerHTML = pending.length === 0
+                        ? '<div style="color:#64748b;font-size:0.85rem;">No pending approvals ✅</div>'
+                        : pending.map(u => `
+                            <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.15);border-radius:8px;flex-wrap:wrap;">
+                                <div style="flex:1;min-width:160px;"><div style="color:#f1f5f9;font-size:0.88rem;font-weight:600;">${u.email}</div><div style="color:#64748b;font-size:0.75rem;">Requested: ${u.requested_at?new Date(u.requested_at).toLocaleDateString():'N/A'}</div></div>
+                                <select id="approve-role-${u.id}" style="padding:6px 10px;background:#1e293b;border:1px solid #334155;border-radius:6px;color:#f1f5f9;font-size:0.8rem;">
+                                    ${['viewer','cashier','manager','admin','owner'].map(r=>`<option value="${r}">${r}</option>`).join('')}
+                                </select>
+                                <button onclick="mtSAApproveUser('${u.id}')" style="padding:6px 14px;background:rgba(16,185,129,0.15);border:1px solid #10b981;color:#34d399;border-radius:6px;cursor:pointer;font-size:0.8rem;font-weight:700;">✅ Approve</button>
+                                <button onclick="mtSARejectUser('${u.id}')" style="padding:6px 14px;background:rgba(239,68,68,0.1);border:1px solid #ef4444;color:#f87171;border-radius:6px;cursor:pointer;font-size:0.8rem;font-weight:700;">🗑 Reject</button>
+                            </div>`).join('');
+                }
+                if (tableEl) {
+                    tableEl.innerHTML = users.length === 0
+                        ? '<div style="color:#64748b;font-size:0.85rem;">No users yet.</div>'
+                        : `<table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+                            <thead><tr style="color:#64748b;text-align:left;border-bottom:1px solid #1e293b;">
+                                <th style="padding:8px 10px;">Email</th><th style="padding:8px 10px;">Role</th>
+                                <th style="padding:8px 10px;">Status</th><th style="padding:8px 10px;">Added</th><th style="padding:8px 10px;">Actions</th>
+                            </tr></thead><tbody>
+                            ${users.map(u=>`<tr style="border-bottom:1px solid #0f172a;">
+                                <td style="padding:9px 10px;color:#e2e8f0;">${u.email}</td>
+                                <td style="padding:9px 10px;"><select onchange="mtSAUpdateRole('${u.id}',this.value)" style="padding:4px 8px;background:#1e293b;border:1px solid #334155;border-radius:5px;color:${roleColors[u.role]||'#94a3b8'};font-size:0.78rem;">${['owner','admin','manager','cashier','viewer'].map(r=>`<option value="${r}"${u.role===r?' selected':''}>${r}</option>`).join('')}</select></td>
+                                <td style="padding:9px 10px;"><span style="color:${statusColors[u.status]||'#94a3b8'};font-weight:600;font-size:0.78rem;">${(u.status||'').toUpperCase()}</span></td>
+                                <td style="padding:9px 10px;color:#64748b;">${u.created_at?new Date(u.created_at).toLocaleDateString():'-'}</td>
+                                <td style="padding:9px 10px;display:flex;gap:6px;flex-wrap:wrap;">
+                                    ${u.status!=='approved'?`<button onclick="mtSAApproveUserDirect('${u.id}')" style="padding:4px 10px;background:rgba(16,185,129,0.1);border:1px solid #10b981;color:#34d399;border-radius:5px;cursor:pointer;font-size:0.75rem;">Approve</button>`:''}
+                                    ${u.status!=='suspended'?`<button onclick="mtSASuspendUser('${u.id}')" style="padding:4px 10px;background:rgba(239,68,68,0.08);border:1px solid #ef4444;color:#f87171;border-radius:5px;cursor:pointer;font-size:0.75rem;">Suspend</button>`:`<button onclick="mtSAUnsuspendUser('${u.id}')" style="padding:4px 10px;background:rgba(99,102,241,0.1);border:1px solid #6366f1;color:#818cf8;border-radius:5px;cursor:pointer;font-size:0.75rem;">Unsuspend</button>`}
+                                </td></tr>`).join('')}
+                            </tbody></table>`;
+                }
+            } catch(e) {
+                const msg = '<div style="color:#f87171;font-size:0.85rem;">Error: '+(e.message||e)+'</div>';
+                if(pendingEl) pendingEl.innerHTML=msg;
+                if(tableEl) tableEl.innerHTML=msg;
+            }
+        }
+
+        async function mtSAApproveUser(docId) {
+            const roleEl = document.getElementById('approve-role-'+docId);
+            const role = roleEl ? roleEl.value : 'viewer';
+            try { await PRISM_SECURITY.approveUser(docId,role,null); mtToast('✅ Approved as '+role,'success'); mtSALoadAllowlist(); }
+            catch(e){ mtToast('Error: '+e.message,'error'); }
+        }
+        async function mtSAApproveUserDirect(docId) {
+            try { await PRISM_SECURITY.approveUser(docId,'viewer',null); mtToast('✅ User approved','success'); mtSALoadAllowlist(); }
+            catch(e){ mtToast('Error: '+e.message,'error'); }
+        }
+        async function mtSARejectUser(docId) {
+            const ok = await showConfirm('Remove this pending user?','warning','Remove User','Yes, Remove').catch(()=>window.confirm('Remove?'));
+            if(!ok) return;
+            try { await window.db.collection(PRISM_SECURITY.COLLECTION).doc(docId).delete(); mtToast('🗑 Removed','success'); mtSALoadAllowlist(); }
+            catch(e){ mtToast('Error: '+e.message,'error'); }
+        }
+        async function mtSASuspendUser(docId) {
+            try { await PRISM_SECURITY.suspendUser(docId); mtToast('🔒 Suspended','success'); mtSALoadAllowlist(); }
+            catch(e){ mtToast('Error: '+e.message,'error'); }
+        }
+        async function mtSAUnsuspendUser(docId) {
+            try { await PRISM_SECURITY.approveUser(docId,null,null); mtToast('✅ Unsuspended','success'); mtSALoadAllowlist(); }
+            catch(e){ mtToast('Error: '+e.message,'error'); }
+        }
+        async function mtSAUpdateRole(docId,role) {
+            try { await PRISM_SECURITY.updateRole(docId,role); mtToast('✅ Role → '+role,'success'); }
+            catch(e){ mtToast('Error: '+e.message,'error'); }
+        }
+        async function mtSAAddUser() {
+            const email  = (document.getElementById('sa-add-email')?.value||'').trim().toLowerCase();
+            const role   = document.getElementById('sa-add-role')?.value||'cashier';
+            const status = document.getElementById('sa-add-status')?.value||'approved';
+            if(!email||!email.includes('@')){ mtToast('Enter a valid email','error'); return; }
+            try {
+                const snap = await window.db.collection(PRISM_SECURITY.COLLECTION).where('email','==',email).get();
+                if(!snap.empty){ mtToast('⚠️ User already exists','warning'); return; }
+                await window.db.collection(PRISM_SECURITY.COLLECTION).add({
+                    email, role, status, organization_id: null,
+                    created_at: new Date().toISOString(),
+                    added_by: MT.currentUser?.email || 'super_admin',
+                    pending_uid_migration: true,
+                });
+                document.getElementById('sa-add-email').value='';
+                mtToast('✅ Added: '+email,'success');
+                mtSALoadAllowlist();
+            } catch(e){ mtToast('Error: '+e.message,'error'); }
+        }
+        window.mtSALoadAllowlist=mtSALoadAllowlist;
+        window.mtSAApproveUser=mtSAApproveUser;
+        window.mtSAApproveUserDirect=mtSAApproveUserDirect;
+        window.mtSARejectUser=mtSARejectUser;
+        window.mtSASuspendUser=mtSASuspendUser;
+        window.mtSAUnsuspendUser=mtSAUnsuspendUser;
+        window.mtSAUpdateRole=mtSAUpdateRole;
+        window.mtSAAddUser=mtSAAddUser;
+
+
+        
+        // ══ REQ6: OWNERSHIP TRANSFER ══
+        async function prismTransferOwnership(newOwnerEmail) {
+            if (!currentAppUser || !['admin','owner'].includes(currentAppUser.role)) {
+                showToast('❌ Only the current owner can transfer ownership.', 'error'); return;
+            }
+            const org = MT.currentOrg;
+            if (!org) { showToast('❌ No active organization.', 'error'); return; }
+
+            const confirmed = await showConfirm(
+                `Transfer ownership of "${org.name}" to ${newOwnerEmail}?\n\nYou will become an Admin. This cannot be easily undone.`,
+                'warning', '🔄 Transfer Ownership', 'Yes, Transfer'
+            ).catch(()=>false);
+            if (!confirmed) return;
+
+            // Find new owner in users list
+            const users = JSON.parse(localStorage.getItem('prism_app_users') || '[]');
+            const newOwner = users.find(u => (u.email||'').toLowerCase() === newOwnerEmail.toLowerCase());
+            if (!newOwner) { showToast('❌ User not found in this organization.', 'error'); return; }
+
+            // Update org record
+            const updatedOrg = { ...org, ownerEmail: newOwnerEmail, owner_uid: newOwner.id || newOwner.uid || '' };
+            MT.currentOrg = updatedOrg;
+            localStorage.setItem('mt_current_org', JSON.stringify(updatedOrg));
+
+            // Update roles in user list
+            const updatedUsers = users.map(u => {
+                if ((u.email||'').toLowerCase() === newOwnerEmail.toLowerCase()) return { ...u, role:'owner' };
+                if ((u.email||'').toLowerCase() === (currentAppUser.email||'').toLowerCase()) return { ...u, role:'admin' };
+                return u;
+            });
+            localStorage.setItem('prism_app_users', JSON.stringify(updatedUsers));
+            currentAppUser = { ...currentAppUser, role:'admin' };
+            localStorage.setItem('carent_current_user', JSON.stringify(currentAppUser));
+
+            // Update Firestore if available
+            if (window.db && org.id) {
+                try {
+                    await window.db.collection(MT.ORGS_COL).doc(org.id).update({
+                        ownerEmail: newOwnerEmail,
+                        owner_uid: newOwner.id || '',
+                        transferredAt: new Date().toISOString(),
+                    });
+                    // Update allowed_users in Firestore
+                    const snap = await window.db.collection(PRISM_SECURITY.COLLECTION)
+                        .where('email','==',newOwnerEmail.toLowerCase()).get();
+                    if (!snap.empty) await snap.docs[0].ref.update({ role:'owner' });
+                    const snap2 = await window.db.collection(PRISM_SECURITY.COLLECTION)
+                        .where('email','==',(currentAppUser.email||'').toLowerCase()).get();
+                    if (!snap2.empty) await snap2.docs[0].ref.update({ role:'admin' });
+                } catch(e) { console.warn('[Transfer] Firestore update failed:', e); }
+            }
+
+            showToast(`✅ Ownership transferred to ${newOwnerEmail}. You are now an Admin.`, 'success');
+            setTimeout(() => { if(typeof loadDashboard==='function') loadDashboard(); }, 800);
+        }
+        window.prismTransferOwnership = prismTransferOwnership;
+
+        // ── Transfer Ownership UI (called from Settings) ──
+        function showTransferOwnershipModal() {
+            const org = MT.currentOrg;
+            if (!org) { showToast('No active organization', 'error'); return; }
+            if (!currentAppUser || !['admin','owner'].includes(currentAppUser.role)) {
+                showToast('❌ Only Owner or Admin can transfer ownership.', 'error'); return;
+            }
+            const users = JSON.parse(localStorage.getItem('prism_app_users') || '[]');
+            const others = users.filter(u => (u.email||'').toLowerCase() !== (currentAppUser.email||'').toLowerCase());
+            
+            const existing = document.getElementById('prism-transfer-modal');
+            if (existing) existing.remove();
+            const div = document.createElement('div');
+            div.id = 'prism-transfer-modal';
+            div.innerHTML = `
+                <div style="position:fixed;inset:0;z-index:99998;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;padding:20px;" onclick="if(event.target===this)this.remove()">
+                    <div style="background:#0f172a;border:1px solid #334155;border-radius:16px;padding:32px;max-width:420px;width:100%;box-shadow:0 30px 60px rgba(0,0,0,0.8);">
+                        <h3 style="color:#f1f5f9;margin:0 0 8px 0;">🔄 Transfer Ownership</h3>
+                        <p style="color:#64748b;font-size:0.85rem;margin:0 0 20px 0;">Transfer ownership of <b style="color:#94a3b8;">${org.name}</b>. You will become an Admin.</p>
+                        ${others.length === 0
+                            ? '<p style="color:#f87171;font-size:0.85rem;">No other users found in this organization.</p>'
+                            : `<div style="margin-bottom:16px;">
+                                <label style="font-size:0.78rem;color:#94a3b8;display:block;margin-bottom:6px;">Select New Owner</label>
+                                <select id="transfer-new-owner" style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.05);border:1px solid #334155;border-radius:8px;color:#f1f5f9;font-size:0.88rem;">
+                                    <option value="">-- Select user --</option>
+                                    ${others.map(u=>`<option value="${u.email||u.username}">${u.fullname||u.username} (${u.role||'member'})</option>`).join('')}
+                                </select>
+                               </div>
+                               <div style="display:flex;gap:10px;justify-content:flex-end;">
+                                   <button onclick="document.getElementById('prism-transfer-modal').remove()" style="padding:10px 20px;background:rgba(255,255,255,0.06);border:1px solid #334155;color:#94a3b8;border-radius:8px;cursor:pointer;">Cancel</button>
+                                   <button onclick="const v=document.getElementById('transfer-new-owner').value;if(!v){showToast('Select a user','error');return;}prismTransferOwnership(v).then(()=>document.getElementById('prism-transfer-modal')?.remove())" style="padding:10px 20px;background:linear-gradient(135deg,#f59e0b,#ef4444);border:none;border-radius:8px;color:#fff;font-weight:700;cursor:pointer;">Transfer Ownership</button>
+                               </div>`
+                        }
+                    </div>
+                </div>`;
+            document.body.appendChild(div);
+        }
+        window.showTransferOwnershipModal = showTransferOwnershipModal;
+
+
+        
+        // ══ REQ7: DATABASE-LEVEL FIELD PROTECTION ══
+        // Wraps Firestore org_member updates to block role/status/org changes by non-admins
+
+        function prismGuardOrgMemberWrite(data, callerRole) {
+            // Fields that only Owner/Admin may write
+            const PROTECTED = ['role', 'status', 'organization_id', 'orgId'];
+            const ALLOWED_ROLES = ['owner', 'admin', 'super_admin'];
+            if (ALLOWED_ROLES.includes(callerRole)) return { ok: true };
+            const forbidden = PROTECTED.filter(f => f in data);
+            if (forbidden.length > 0) {
+                return { ok: false, reason: `Field(s) [${forbidden.join(', ')}] can only be changed by Owner or Admin.` };
+            }
+            return { ok: true };
+        }
+
+        // Guard syncToFirebase from writing protected fields for low-privilege users
+        // Deferred so syncToFirebase is guaranteed to exist
+        window._installReq7Guards = function() {
+            const _origSyncToFirebase = typeof window.syncToFirebase === 'function' ? window.syncToFirebase : null;
+            if (_origSyncToFirebase && !_origSyncToFirebase._req7guarded) {
+                window.syncToFirebase = async function(...args) {
+                    const _role = currentAppUser?.role || 'viewer';
+                    if (['viewer','cashier'].includes(_role)) {
+                        console.info('[Security REQ7] Sync blocked for role:', _role);
+                        return;
+                    }
+                    return _origSyncToFirebase(...args);
+                };
+                window.syncToFirebase._req7guarded = true;
+            }
+        };
+        // Install guards after Firebase init (500ms delay to ensure fns exist)
+        setTimeout(() => { try { window._installReq7Guards(); } catch(e){} }, 500);
+
+        // Expose guard for use in other functions
+        window.prismGuardOrgMemberWrite = prismGuardOrgMemberWrite;
+
+        // ── REQ7: Block direct allowed_users field edits from non-admin ──
+        // Wrap PRISM_SECURITY.updateRole and approveUser to verify caller
+        const _origUpdateRole = PRISM_SECURITY.updateRole.bind(PRISM_SECURITY);
+        PRISM_SECURITY.updateRole = async function(docId, role) {
+            const _role = currentAppUser?.role;
+            const _isSA = MT.SUPER_ADMINS?.map(e=>e.toLowerCase()).includes((currentAppUser?.email||'').toLowerCase());
+            if (!_isSA && !['admin','owner'].includes(_role)) {
+                console.warn('[Security REQ7] updateRole blocked — insufficient role:', _role);
+                return false;
+            }
+            return _origUpdateRole(docId, role);
+        };
+
+        const _origApprove = PRISM_SECURITY.approveUser.bind(PRISM_SECURITY);
+        PRISM_SECURITY.approveUser = async function(docId, role, orgId) {
+            const _role = currentAppUser?.role;
+            const _isSA = MT.SUPER_ADMINS?.map(e=>e.toLowerCase()).includes((currentAppUser?.email||'').toLowerCase());
+            if (!_isSA && !['admin','owner'].includes(_role)) {
+                console.warn('[Security REQ7] approveUser blocked — insufficient role:', _role);
+                return false;
+            }
+            return _origApprove(docId, role, orgId);
+        };
+
+        const _origSuspend = PRISM_SECURITY.suspendUser.bind(PRISM_SECURITY);
+        PRISM_SECURITY.suspendUser = async function(docId) {
+            const _role = currentAppUser?.role;
+            const _isSA = MT.SUPER_ADMINS?.map(e=>e.toLowerCase()).includes((currentAppUser?.email||'').toLowerCase());
+            if (!_isSA && !['admin','owner'].includes(_role)) {
+                console.warn('[Security REQ7] suspendUser blocked — insufficient role:', _role);
+                return false;
+            }
+            return _origSuspend(docId);
+        };
 
 
         // ---- Intercept existing appLogout to use MT logout ----
