@@ -7814,8 +7814,9 @@ try{if(firebase.firestore&&firebase.firestore.persistentLocalCache){firestore.se
             }
         }
 
-        async function syncCollectionToLocal(storeName, data) {
-            // Wait for DB to be ready
+        async function syncCollectionToLocal(storeName, data, authoritative) {
+            // authoritative=true: clear store first (used after bulk wipe)
+            // authoritative=false/undefined: merge by key (safe for normal sync)
             if (!db || !dbReady) {
                 console.log('[Sync] DB not ready for', storeName, '— waiting...');
                 await ensureDB();
@@ -7825,10 +7826,7 @@ try{if(firebase.firestore&&firebase.firestore.persistentLocalCache){firestore.se
                 const transaction = db.transaction([storeName], 'readwrite');
                 const store = transaction.objectStore(storeName);
 
-                // Clear first — cloud is authoritative. Deleted records must not linger locally.
-                const clearReq = store.clear();
-                clearReq.onerror = () => reject(clearReq.error);
-                clearReq.onsuccess = () => {
+                const doPut = () => {
                     if (data.length === 0) { resolve(); return; }
                     let pending = data.length;
                     data.forEach(item => {
@@ -7837,6 +7835,16 @@ try{if(firebase.firestore&&firebase.firestore.persistentLocalCache){firestore.se
                         req.onerror   = () => { pending--; if (pending === 0) resolve(); };
                     });
                 };
+
+                if (authoritative) {
+                    // Clear first so deleted records don't linger
+                    const clearReq = store.clear();
+                    clearReq.onerror   = () => reject(clearReq.error);
+                    clearReq.onsuccess = () => doPut();
+                } else {
+                    // Merge — put() only, never deletes existing local records
+                    doPut();
+                }
 
                 transaction.onerror = () => reject(transaction.error);
             });
@@ -27413,9 +27421,11 @@ window.addEventListener('DOMContentLoaded', () => {
                         'waterCustomers','waterSales','employees','cashAdvances',
                         'salaryPayments','timeRecords','tasks'];
 
+                    // Use authoritative (clear-then-put) only after a bulk wipe (clearedAt present)
+                    const isWipe = !!data.clearedAt;
                     for (const t of tables) {
                         if (data[t] && Array.isArray(data[t])) {
-                            try { await syncCollectionToLocal(t, data[t]); } catch(e) {}
+                            try { await syncCollectionToLocal(t, data[t], isWipe); } catch(e) {}
                         }
                     }
 
