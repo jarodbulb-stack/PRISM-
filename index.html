@@ -10556,7 +10556,8 @@ try{if(firebase.firestore&&firebase.firestore.persistentLocalCache){firestore.se
             const tenant = await dbGet('tenants', tenantId);
             tenant.depositPaid = true;
             tenant.depositPaidDate = new Date().toISOString().split('T')[0];
-            await dbUpdate('tenants', tenant);
+            showToast('⏳ Updating deposit...', 'info');
+                await dbUpdate('tenants', tenant);
             await viewTenantDetails(tenantId);
             debouncedSync();
         }
@@ -10750,7 +10751,8 @@ async function recordTenantPayment(tenantId) {
             payment.recordedBy = currentAppUser?.username || 'unknown';
             payment.recordedByRole = currentAppUser?.role || 'unknown';
             payment.recordedByEmail = currentAppUser?.email || 'unknown';
-            await dbAdd('payments', payment);
+            showToast('⏳ Recording payment...', 'info');
+                await dbAdd('payments', payment);
             await viewTenantDetails(tenantId);
             loadTenants();
             loadDashboard();
@@ -11831,7 +11833,8 @@ async function recordTenantPayment(tenantId) {
 
         async function deleteWaterSale(id) {
     if (!await showConfirm('This water sale record will be permanently deleted.', 'danger', '🗑️ Delete Water Sale', 'Yes, Delete')) return;
-    await dbDelete('waterSales', id);
+    showToast('⏳ Deleting record...', 'info');
+                await dbDelete('waterSales', id);
     loadWaterCustomers();
     showToast('Water sale deleted', 'success');
 }
@@ -12179,6 +12182,7 @@ async function loadWaterCustomers() {
                 sale.balance -= applied;
                 sale.status = sale.balance <= 0 ? 'paid' : 'partial';
                 sale.lastPaymentDate = new Date().toISOString().split('T')[0];
+                showToast('⏳ Recording water payment...', 'info');
                 await dbUpdate('waterSales', sale);
                 remaining -= applied;
                 appliedCount++;
@@ -12414,7 +12418,8 @@ async function loadWaterCustomers() {
                     await dbUpdate('employees', employee);
                     showToast('Employee updated successfully!', 'success');
                 } else {
-                    await dbAdd('employees', employee);
+                    showToast('⏳ Saving employee...', 'info');
+                await dbAdd('employees', employee);
                     showToast('Employee added successfully!', 'success');
                 }
                 
@@ -13205,6 +13210,7 @@ async function showPayrollSummary() {
             };
             
             try {
+                showToast('⏳ Processing salary payment...', 'info');
                 await dbAdd('salaryPayments', salary);
                 
                 // Mark time records as paid
@@ -13543,7 +13549,8 @@ async function showPayrollSummary() {
                 if (t.employeeId === id) await dbDelete('timeRecords', t.id);
             }
             
-            await dbDelete('employees', id);
+            showToast('⏳ Deleting employee...', 'info');
+                await dbDelete('employees', id);
             hideModal('employee-detail-modal');
             loadEmployees();
             debouncedSync();
@@ -13882,6 +13889,7 @@ async function showPayrollSummary() {
                     adjustmentNote: `${typeLabels[type]}: ₱${amount} — ${note}`,
                     createdAt: new Date().toISOString()
                 };
+                showToast('⏳ Saving adjustment...', 'info');
                 await dbAdd('timeRecords', newRecord);
             }
 
@@ -14255,7 +14263,8 @@ async function showPayrollSummary() {
                 createdAt: new Date().toISOString()
             };
 
-            await dbAdd('creditPayments', creditPayment);
+            showToast('⏳ Recording payment...', 'info');
+                await dbAdd('creditPayments', creditPayment);
             
             // ✅ AUTO-UPDATE CREDIT STATUS IF FULLY PAID
             const credit = await dbGet('credits', creditId);
@@ -15787,6 +15796,7 @@ async function showPayrollSummary() {
             if (!await showConfirm('This income record will be permanently deleted.', 'danger', '🗑️ Delete Income', 'Yes, Delete')) return;
             
             try {
+                showToast('⏳ Deleting record...', 'info');
                 await dbDelete('additionalIncome', parseInt(id));
                 hideModal('income-modal');
                 await loadIncome();
@@ -16958,6 +16968,7 @@ async function showPayrollSummary() {
                     createdAt: new Date().toISOString(),
                     isSample: false
                 };
+                showToast('⏳ Submitting early-out request...', 'info');
                 await dbAdd('customNotes', {
                     ...earlyOut,
                     title: `⏰ Early-Out Request — ${now}`,
@@ -17011,6 +17022,7 @@ async function showPayrollSummary() {
                     createdAt: now.toISOString(),
                     date: now.toISOString().split('T')[0]
                 };
+                showToast('⏳ Submitting void request...', 'info');
                 await dbAdd('customNotes', {
                     ...voidReq,
                     title: `🚫 Void Request — ${type} #${recordId}`,
@@ -25384,10 +25396,11 @@ window.mtSAToggleOrgStatus=mtSAToggleOrgStatus;
                 'info', '🔑 Send Password Reset', 'Yes, Send Email'
             );
             if (!ok) return;
+            showToast('⏳ Sending password reset email...', 'info');
             try {
                 const authInst = window.auth || (firebase && firebase.auth && firebase.auth());
                 await authInst.sendPasswordResetEmail(email);
-                showToast('📧 Password reset email sent to ' + email, 'success');
+                showToast('✅ Password reset email sent to ' + email + ' — ask them to check their inbox!', 'success');
             } catch(e) {
                 showToast('❌ Failed: ' + (e.message || e), 'error');
             }
