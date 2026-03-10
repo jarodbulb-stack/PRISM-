@@ -7674,7 +7674,7 @@ try{if(firebase.firestore&&firebase.firestore.persistentLocalCache){firestore.se
                 };
 
                 _lastSyncTimestamp = data.lastSync;
-                await dataRef.set(data, { merge: true });
+                await dataRef.set(data);
                 console.log('[Sync] Data synced to Firestore — org:', orgId);
                 updateSyncStatus('synced');
                 const _pushedUsers = data.appUsers ? data.appUsers.length : 0;
@@ -7755,23 +7755,16 @@ try{if(firebase.firestore&&firebase.firestore.persistentLocalCache){firestore.se
                     const data = doc.data();
                     console.log('[Sync] Data found in Firebase, syncing to local...');
 
-                    // Sync each collection
-                    if (data.properties) await syncCollectionToLocal('properties', data.properties);
-                    if (data.tenants) await syncCollectionToLocal('tenants', data.tenants);
-                    if (data.payments) await syncCollectionToLocal('payments', data.payments);
-                    if (data.credits) await syncCollectionToLocal('credits', data.credits);
-                    if (data.creditPayments) await syncCollectionToLocal('creditPayments', data.creditPayments);
-                    if (data.expenses) await syncCollectionToLocal('expenses', data.expenses);
-                    if (data.customNotes) await syncCollectionToLocal('customNotes', data.customNotes);
-                    if (data.additionalIncome) await syncCollectionToLocal('additionalIncome', data.additionalIncome);
-                    if (data.clientCharges) await syncCollectionToLocal('clientCharges', data.clientCharges);
-                    if (data.waterCustomers) await syncCollectionToLocal('waterCustomers', data.waterCustomers);
-                    if (data.waterSales) await syncCollectionToLocal('waterSales', data.waterSales);
-                    if (data.employees) await syncCollectionToLocal('employees', data.employees);
-                    if (data.cashAdvances) await syncCollectionToLocal('cashAdvances', data.cashAdvances);
-                    if (data.salaryPayments) await syncCollectionToLocal('salaryPayments', data.salaryPayments);
-                    if (data.timeRecords) await syncCollectionToLocal('timeRecords', data.timeRecords);
-                    if (data.tasks) await syncCollectionToLocal('tasks', data.tasks);
+                    // authoritative=true when clearedAt is present — wipe local before putting
+                    const isWipe = !!data.clearedAt;
+                    const stores = ['properties','tenants','payments','credits','creditPayments',
+                        'expenses','customNotes','additionalIncome','clientCharges',
+                        'waterCustomers','waterSales','employees','cashAdvances',
+                        'salaryPayments','timeRecords','tasks'];
+                    for (const s of stores) {
+                        // Always sync — even empty arrays must clear local when authoritative
+                        await syncCollectionToLocal(s, Array.isArray(data[s]) ? data[s] : [], isWipe);
+                    }
 
                     // Restore app users (admin/cashier accounts) to localStorage
                     if (data.appUsers && Array.isArray(data.appUsers) && data.appUsers.length > 0) {
@@ -18187,6 +18180,7 @@ async function showPayrollSummary() {
                 try { await syncToFirebase(); } catch(e) {}
 
                 showToast(`✅ Done! ${totalDeleted} sample records deleted. Your real data is safe.`, 'success');
+                await new Promise(r => setTimeout(r, 1500));
                 await prismFullRefresh();
                 try { if (typeof mtStartRealtimeSync === 'function') mtStartRealtimeSync(); } catch(e) {}
 
@@ -18320,6 +18314,8 @@ async function clearAllData() {
                 }
 
                 showToast('\u2705 All done.', 'success');
+                // Wait briefly so Firestore write propagates before resuming listener
+                await new Promise(r => setTimeout(r, 1500));
                 await prismFullRefresh();
                 // ── Resume realtime sync after everything is refreshed ──
                 try { if (typeof mtStartRealtimeSync === 'function') mtStartRealtimeSync(); } catch(e) {}
