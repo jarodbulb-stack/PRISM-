@@ -3208,7 +3208,7 @@
     </div>
 
     <!-- REQUEST ACCESS SCREEN (New Subscriber) -->
-    <div id="prism-request-screen" class="prism-screen" style="display:none;">
+    <div id="prism-request-screen" class="prism-screen">
         <div class="prism-login-wrap">
             <div class="prism-login-card">
                 <div class="prism-card-logo">
@@ -3285,7 +3285,7 @@
     </div>
 
     <!-- STAFF REGISTER SCREEN -->
-    <div id="prism-staff-screen" class="prism-screen" style="display:none;">
+    <div id="prism-staff-screen" class="prism-screen">
         <div class="prism-login-wrap">
             <div class="prism-login-card">
                 <div class="prism-card-logo">
@@ -3339,7 +3339,7 @@
     </div>
 
     <!-- ORG PICKER SCREEN — shown when user belongs to multiple orgs -->
-    <div id="prism-org-picker" class="prism-screen" style="display:none;">
+    <div id="prism-org-picker" class="prism-screen">
         <div class="prism-login-wrap">
             <div class="prism-login-card" style="max-width:460px;">
                 <div class="prism-card-logo">
@@ -3625,7 +3625,7 @@
     </div>
     <div class="mt-sa-nav">
         <button class="mt-sa-nav-btn active" onclick="mtSATab('overview', this)">Overview</button>
-        <button class="mt-sa-nav-btn" onclick="mtSATab('allowlist', this);mtSALoadAllowlist()">🔐 Access Control</button>
+        <button class="mt-sa-nav-btn" onclick="mtSATab('allowlist', this);mtSALoadAllowlist()" id="sa-access-tab-btn">🔐 Access Control <span id="sa-pending-badge" style="display:none;background:#ef4444;color:#fff;font-size:0.68rem;font-weight:800;padding:1px 7px;border-radius:20px;margin-left:4px;vertical-align:middle;"></span></button>
         <button class="mt-sa-nav-btn" onclick="mtSATab('orgs', this)">Organizations</button>
     </div>
     <div class="mt-sa-content">
@@ -6597,7 +6597,7 @@
                     <input type="hidden" id="note-edit-id" value="">
                     <div class="form-group">
                         <label>Category</label>
-                        <select id="note-category" required>
+                        <select id="note-category" required onchange="prismToggleReminderFields(this.value)">
                             <option value="">Select category</option>
                             <option value="client">👤 Client Note</option>
                             <option value="area">📍 Area/Property Note</option>
@@ -6617,6 +6617,25 @@
                         <label>Date</label>
                         <input type="date" id="note-date" required>
                     </div>
+
+                    <!-- REMINDER ONLY: Time + Repeat fields (shown only for ⏰ Reminder category) -->
+                    <div id="reminder-extra-fields" style="display:none;">
+                        <div class="form-group">
+                            <label>⏰ Reminder Time <span style="font-size:0.78rem;color:#64748b;">(shown on dashboard when you open the app)</span></label>
+                            <input type="time" id="note-reminder-time" value="08:00" style="background:var(--bg-card);border:1px solid var(--border-color);border-radius:8px;padding:10px 12px;color:var(--text-primary);width:100%;font-size:0.95rem;">
+                        </div>
+                        <div class="form-group">
+                            <label>🔁 Repeat</label>
+                            <select id="note-repeat">
+                                <option value="none">No repeat — one time only</option>
+                                <option value="daily">Every day</option>
+                                <option value="weekly">Every week (same day)</option>
+                                <option value="monthly">Every month (same date)</option>
+                                <option value="yearly">Every year (same date)</option>
+                            </select>
+                        </div>
+                    </div>
+
                     <div class="form-group">
                         <label>Link to (Optional)</label>
                         <select id="note-link">
@@ -14689,6 +14708,7 @@ async function showPayrollSummary() {
                 document.getElementById('note-modal-title').textContent = 'Add Note';
                 document.getElementById('note-form').reset();
                 document.getElementById('note-edit-id').value = '';
+                prismToggleReminderFields('');  // hide reminder fields on new note
                 document.getElementById('note-date').value = new Date().toISOString().split('T')[0];
                 clearNotePhoto();
                 populateNoteLinkDropdown();
@@ -14815,6 +14835,9 @@ async function showPayrollSummary() {
                     return;
                 }
 
+                const reminderTime = document.getElementById('note-reminder-time')?.value || '08:00';
+                const repeat       = document.getElementById('note-repeat')?.value || 'none';
+
                 const note = {
                     category,
                     title,
@@ -14822,7 +14845,11 @@ async function showPayrollSummary() {
                     date,
                     linkedTo: link || null,
                     photo: notePhotoData || null,
-                    createdAt: new Date().toISOString()
+                    createdAt: new Date().toISOString(),
+                    // Reminder fields (only meaningful for category='reminder')
+                    reminderTime: category === 'reminder' ? reminderTime : null,
+                    repeat:       category === 'reminder' ? repeat : 'none',
+                    dismissed:    false,  // reset dismissed on save/edit
                 };
 
                 if (editId) {
@@ -14844,6 +14871,143 @@ async function showPayrollSummary() {
                 showToast('❌ Error saving note: ' + error.message, 'error');
             }
         }
+
+        // ══════════════════════════════════════════════════════
+        // PRISM REMINDER ENGINE
+        // Checks notes on every app open — shows dashboard alert
+        // ══════════════════════════════════════════════════════
+
+        function prismToggleReminderFields(category) {
+            const el = document.getElementById('reminder-extra-fields');
+            if (el) el.style.display = (category === 'reminder') ? 'block' : 'none';
+        }
+        window.prismToggleReminderFields = prismToggleReminderFields;
+
+        // Check if a reminder note is due TODAY based on its date + repeat setting
+        function prismIsReminderDueToday(note) {
+            if (!note.date) return false;
+            const today  = new Date();
+            const tY = today.getFullYear(), tM = today.getMonth()+1, tD = today.getDate();
+            const noteDate = new Date(note.date + 'T00:00:00');
+            const nY = noteDate.getFullYear(), nM = noteDate.getMonth()+1, nD = noteDate.getDate();
+
+            switch (note.repeat || 'none') {
+                case 'none':
+                    // Due exactly on that date
+                    return (tY===nY && tM===nM && tD===nD);
+                case 'daily':
+                    // Due every day from note date onwards
+                    return today >= noteDate;
+                case 'weekly':
+                    // Due every week on same weekday
+                    return today >= noteDate && today.getDay() === noteDate.getDay();
+                case 'monthly':
+                    // Due every month on same day-of-month
+                    return today >= noteDate && tD === nD;
+                case 'yearly':
+                    // Due every year on same month+day
+                    return today >= noteDate && tM===nM && tD===nD;
+                default:
+                    return (tY===nY && tM===nM && tD===nD);
+            }
+        }
+
+        // Main check — called on every dashboard load + app open
+        async function prismCheckReminders() {
+            try {
+                if (!db || !db.objectStoreNames.contains('customNotes')) return;
+                const notes = await dbGetAll('customNotes');
+                const reminders = (notes || []).filter(n =>
+                    n.category === 'reminder' && prismIsReminderDueToday(n)
+                );
+
+                const banner = document.getElementById('notifications-banner');
+                if (!banner) return;
+
+                if (reminders.length === 0) {
+                    banner.classList.add('hidden');
+                    banner.innerHTML = '';
+                    return;
+                }
+
+                // Build banner HTML
+                const itemsHtml = reminders.map(r => {
+                    const repeatLabel = r.repeat && r.repeat !== 'none'
+                        ? `<span style="color:#10b981;font-size:0.72rem;margin-left:6px;">🔁 ${r.repeat}</span>` : '';
+                    const timeLabel = r.reminderTime
+                        ? `<span style="color:#818cf8;font-size:0.72rem;margin-left:6px;">⏰ ${r.reminderTime}</span>` : '';
+                    return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.06);">
+                        <span style="font-size:1.1rem;">🔔</span>
+                        <div style="flex:1;">
+                            <span style="font-weight:600;color:#f1f5f9;">${r.title}</span>
+                            ${timeLabel}${repeatLabel}
+                            ${r.description ? `<div style="font-size:0.78rem;color:#64748b;margin-top:1px;">${r.description}</div>` : ''}
+                        </div>
+                    </div>`;
+                }).join('');
+
+                banner.innerHTML = `
+                    <div style="background:linear-gradient(135deg,rgba(99,102,241,0.15),rgba(245,158,11,0.1));
+                                border:1px solid rgba(245,158,11,0.3);border-radius:12px;
+                                padding:14px 16px;margin-bottom:16px;position:relative;">
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+                            <div style="font-weight:700;color:#fbbf24;font-size:0.95rem;">
+                                🔔 ${reminders.length} Reminder${reminders.length>1?'s':''} Today
+                            </div>
+                            <div style="display:flex;gap:8px;">
+                                <button onclick="showSection('notes')" style="font-size:0.75rem;padding:4px 10px;background:rgba(99,102,241,0.2);border:1px solid rgba(99,102,241,0.4);color:#818cf8;border-radius:6px;cursor:pointer;">View All</button>
+                                <button onclick="prismDismissReminders()" style="font-size:0.75rem;padding:4px 10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:#64748b;border-radius:6px;cursor:pointer;">✕ Dismiss</button>
+                            </div>
+                        </div>
+                        <div style="max-height:200px;overflow-y:auto;">
+                            ${itemsHtml}
+                        </div>
+                    </div>`;
+                banner.classList.remove('hidden');
+
+                // Also update bell badge on Notes nav button if it exists
+                prismUpdateReminderBadge(reminders.length);
+
+            } catch(e) {
+                console.warn('[Reminders] Check failed:', e);
+            }
+        }
+
+        function prismDismissReminders() {
+            const banner = document.getElementById('notifications-banner');
+            if (banner) {
+                banner.classList.add('hidden');
+                banner.innerHTML = '';
+            }
+            // Store dismiss date so it doesn't re-show until tomorrow
+            try { localStorage.setItem('prism_reminders_dismissed', new Date().toDateString()); } catch(e) {}
+        }
+
+        function prismUpdateReminderBadge(count) {
+            // Find the Notes nav button and add/update badge
+            const btns = document.querySelectorAll('.nav-btn, .sidebar-item, [onclick*="notes"]');
+            btns.forEach(btn => {
+                if (btn.textContent && btn.textContent.includes('Note')) {
+                    let badge = btn.querySelector('.reminder-nav-badge');
+                    if (count > 0) {
+                        if (!badge) {
+                            badge = document.createElement('span');
+                            badge.className = 'reminder-nav-badge';
+                            badge.style.cssText = 'background:#f59e0b;color:#000;font-size:0.65rem;font-weight:800;padding:1px 5px;border-radius:10px;margin-left:4px;vertical-align:middle;';
+                            btn.appendChild(badge);
+                        }
+                        badge.textContent = count;
+                    } else if (badge) {
+                        badge.remove();
+                    }
+                }
+            });
+        }
+
+        window.prismCheckReminders   = prismCheckReminders;
+        window.prismDismissReminders = prismDismissReminders;
+
+
 
         async function loadNotes() {
             try {
@@ -14923,6 +15087,8 @@ async function showPayrollSummary() {
                         <p class="note-preview">${note.description}</p>
                         <div class="note-meta">
                             <span>${note.date}</span>
+                            ${note.reminderTime && note.category==='reminder' ? `<span style="color:#6366f1;font-size:0.75rem;">⏰ ${note.reminderTime}</span>` : ''}
+                            ${note.repeat && note.repeat !== 'none' && note.category==='reminder' ? `<span style="color:#10b981;font-size:0.75rem;">🔁 ${note.repeat}</span>` : ''}
                             ${note.photo ? '<span class="has-photo">📷 Has photo</span>' : ''}
                         </div>
                     </div>
@@ -15115,7 +15281,10 @@ async function showPayrollSummary() {
                         <span class="note-category ${note.category}">${categoryLabels[note.category] || note.category}</span>
                         <button class="btn btn-sm btn-secondary" onclick="editNote(${id})">Edit</button>
                     </div>
-                    <p><strong>Date:</strong> ${note.date}</p>
+                    <p><strong>Date:</strong> ${note.date}
+                        ${note.category==='reminder' && note.reminderTime ? `&nbsp;&nbsp;⏰ <strong>${note.reminderTime}</strong>` : ''}
+                        ${note.category==='reminder' && note.repeat && note.repeat!=='none' ? `&nbsp;&nbsp;🔁 <strong>${note.repeat}</strong>` : ''}
+                    </p>
                     <div style="margin-top: 12px; padding: 12px; background: var(--gray-50); border-radius: 8px;">
                         <p style="white-space: pre-wrap;">${note.description}</p>
                     </div>
@@ -15152,6 +15321,14 @@ async function showPayrollSummary() {
             document.getElementById('note-title').value = note.title;
             document.getElementById('note-description').value = note.description;
             document.getElementById('note-date').value = note.date;
+            // Restore reminder fields
+            prismToggleReminderFields(note.category);
+            if (note.category === 'reminder') {
+                const rtEl = document.getElementById('note-reminder-time');
+                const rpEl = document.getElementById('note-repeat');
+                if (rtEl) rtEl.value = note.reminderTime || '08:00';
+                if (rpEl) rpEl.value = note.repeat || 'none';
+            }
             
             await populateNoteLinkDropdown();
             document.getElementById('note-link').value = note.linkedTo || '';
@@ -16202,6 +16379,12 @@ async function showPayrollSummary() {
                 currentMonthEl.textContent = now.toLocaleString('default', { month: 'long', year: 'numeric' });
             }
 
+            // ── Check today's reminders ──
+            const _dismissedDate = (() => { try { return localStorage.getItem('prism_reminders_dismissed'); } catch(e) { return null; } })();
+            if (_dismissedDate !== new Date().toDateString()) {
+                if (typeof prismCheckReminders === 'function') prismCheckReminders();
+            }
+
             // Basic stats with null checks
             const statProperties = document.getElementById('stat-properties');
             const statTenants = document.getElementById('stat-tenants');
@@ -16845,7 +17028,13 @@ async function showPayrollSummary() {
                 if (d.getFullYear()!==year || d.getMonth()!==month) return;
                 const dueDay = d.getDate();
                 const sd = getDay(dueDay);
-                sd.notes.push({ type:'note', label:`📝 ${note.title||'Note'}`, sub: note.category||'Note' });
+                const isReminder = note.category === 'reminder';
+                sd.notes.push({
+                    type: isReminder ? 'reminder' : 'note',
+                    label: `${isReminder ? '🔔' : '📝'} ${note.title||'Note'}`,
+                    sub: isReminder && note.repeat && note.repeat!=='none' ? `🔁 ${note.repeat}` : (note.category||'Note'),
+                    reminderTime: note.reminderTime || null,
+                });
             });
 
             // ── RENDER ──
@@ -16875,7 +17064,10 @@ async function showPayrollSummary() {
                 if (sd.tenants.length>0 || sd.overdue.some(x=>x.type==='tenant'))  dots += '<span class="cal-dot dot-rent"></span>';
                 if (sd.debtors.length>0 || sd.overdue.some(x=>x.type==='debtor'))   dots += '<span class="cal-dot dot-credit"></span>';
                 if (hasTask || sd.overdue.some(x=>x.type==='task'))                 dots += '<span class="cal-dot dot-task"></span>';
-                if (hasNote)                                                          dots += '<span class="cal-dot dot-note"></span>';
+                const hasReminder = sd.notes.some(n => n.type==='reminder');
+                const hasPlainNote = sd.notes.some(n => n.type==='note');
+                if (hasReminder)  dots += '<span class="cal-dot dot-reminder" title="Reminder"></span>';
+                if (hasPlainNote) dots += '<span class="cal-dot dot-note"></span>';
 
                 // Tooltip items
                 let tooltip = '';
@@ -16906,6 +17098,7 @@ async function showPayrollSummary() {
                     .dot-credit { background:#f97316; }
                     .dot-task   { background:#a78bfa; }
                     .dot-note   { background:#4ade80; }
+                    .cal-dot.dot-reminder { background:#f59e0b; }
                     .cal-badge  { position:absolute; top:2px; right:3px; font-size:0.55rem; background:rgba(255,255,255,0.15); border-radius:6px; padding:0 3px; color:#94a3b8; }
                     .calendar-day { position:relative; }
                     .has-task   { border-color: rgba(167,139,250,0.4) !important; background: rgba(167,139,250,0.05) !important; }
@@ -17109,7 +17302,38 @@ async function showPayrollSummary() {
                 await dbClear('expenses');
                 try { await dbClear('additionalIncome'); } catch (e) {}
                 try { await dbClear('clientCharges'); } catch (e) {}
-                try { await dbClear('customNotes'); } catch (e) {}
+                // Ask about personal reminders before deleting
+                const notes = await dbGetAll('customNotes').catch(()=>[]);
+                const reminders = (notes||[]).filter(n => n.category === 'reminder');
+                if (reminders.length > 0) {
+                    const keepReminders = await showConfirm(
+                        `You have ${reminders.length} personal reminder${reminders.length>1?'s':''} (SSS, bills, etc.)\n\nDo you want to KEEP your reminders?`,
+                        'warning', '🔔 Keep Reminders?', 'Yes, keep my reminders', 'No, delete everything'
+                    );
+                    if (keepReminders) {
+                        // Delete only non-reminder notes
+                        const toDelete = notes.filter(n => n.category !== 'reminder');
+                        for (const n of toDelete) { try { await dbDelete('customNotes', n.id); } catch(e) {} }
+                    } else {
+                        try {
+                    await dbClear('customNotes');
+                    // Restore personal reminders if user chose to keep them
+                    if (window._savedReminders && window._savedReminders.length > 0) {
+                        for (const r of window._savedReminders) {
+                            try {
+                                const restored = {...r};
+                                delete restored.id; // let IndexedDB assign new id
+                                await dbAdd('customNotes', restored);
+                            } catch(e) {}
+                        }
+                        showToast(`🔔 ${window._savedReminders.length} reminder(s) restored`, 'success');
+                        window._savedReminders = null;
+                    }
+                } catch (e) {}
+                    }
+                } else {
+                    try { await dbClear('customNotes'); } catch (e) {}
+                }
                 try { await dbClear('waterCustomers'); } catch (e) {}
                 try { await dbClear('waterSales'); } catch (e) {}
                 try { await dbClear('employees'); } catch (e) {}
@@ -17778,15 +18002,32 @@ async function showPayrollSummary() {
         window.deleteSampleData = deleteSampleData;
 
         async function clearAllData() {
+            // Step 0 — silently save personal reminders before clearing
+            // Reminders (SSS, bills, etc.) are personal and always survive a data reset
+            try {
+                const _allNotes = await dbGetAll('customNotes');
+                window._savedReminders = (_allNotes||[]).filter(n => n.category === 'reminder');
+            } catch(e) { window._savedReminders = []; }
+
             // Step 1
             const _ca1 = await showConfirm('ALL data will be permanently deleted — properties, tenants, payments, credits, expenses, notes, water records, and employees.\n\nThis CANNOT be undone.', 'danger', '☢️ Delete ALL Data', 'Yes, continue');
             if (!_ca1) return;
             // Step 2
             const _ca2 = await showConfirm('This is your FINAL warning.\n\nEvery single record — real and sample — will be gone forever. Are you absolutely sure?', 'danger', '☢️ Point of No Return', 'I understand, proceed');
             if (!_ca2) return;
-            // Step 3 — type confirm
-            const _ca3 = window.prompt('Type  DELETE ALL  to confirm (case sensitive):');
-            if (_ca3 !== 'DELETE ALL') { showToast('❌ Cancelled — text did not match.', 'error'); return; }
+            // Step 3 — type confirm + optional reminder wipe
+            const _ca3 = window.prompt(
+                'Type  DELETE ALL  to confirm (case sensitive).' +
+                (window._savedReminders && window._savedReminders.length > 0
+                    ? '\n\n🔔 Your ' + window._savedReminders.length + ' personal reminder(s) will be KEPT after clearing.\nType  DELETE ALL REMINDERS  instead to also wipe them.'
+                    : '')
+            );
+            if (_ca3 === 'DELETE ALL REMINDERS') {
+                window._savedReminders = []; // wipe reminders too
+            } else if (_ca3 !== 'DELETE ALL') {
+                showToast('❌ Cancelled — text did not match.', 'error');
+                return;
+            }
 
             showToast('⏳ Deleting all data...', 'info');
 
@@ -23946,34 +24187,36 @@ async function _mtWaitForAuth(maxMs = 20000) {
         let _selectedPlan = 'basic';
 
         function prismShowRequestAccess() {
-            document.querySelectorAll('.prism-screen').forEach(s => s.style.display='none');
-            const s = document.getElementById('prism-request-screen');
-            if (s) s.style.display='flex';
+            prismScreen('prism-request-screen');
             // Clear form
             ['req-name','req-email','req-phone','req-orgname'].forEach(id => {
                 const el = document.getElementById(id);
                 if (el) el.value='';
             });
-            document.getElementById('prism-request-error').style.display='none';
-            document.getElementById('prism-request-success').style.display='none';
+            const errEl = document.getElementById('prism-request-error');
+            const sucEl = document.getElementById('prism-request-success');
+            if (errEl) errEl.style.display='none';
+            if (sucEl) sucEl.style.display='none';
+            const btn = document.getElementById('req-submit-btn');
+            if (btn) { btn.disabled=false; btn.textContent='📩 Submit Request'; }
         }
 
         function prismShowStaffRegister() {
-            document.querySelectorAll('.prism-screen').forEach(s => s.style.display='none');
-            const s = document.getElementById('prism-staff-screen');
-            if (s) s.style.display='flex';
+            prismScreen('prism-staff-screen');
             ['staff-name','staff-email','staff-password','staff-confirm'].forEach(id => {
                 const el = document.getElementById(id);
                 if (el) el.value='';
             });
-            document.getElementById('prism-staff-error').style.display='none';
-            document.getElementById('prism-staff-success').style.display='none';
+            const errEl = document.getElementById('prism-staff-error');
+            const sucEl = document.getElementById('prism-staff-success');
+            if (errEl) errEl.style.display='none';
+            if (sucEl) sucEl.style.display='none';
+            const btn = document.getElementById('staff-submit-btn');
+            if (btn) { btn.disabled=false; btn.textContent='Create Staff Account'; }
         }
 
         function prismBackToLogin() {
-            document.querySelectorAll('.prism-screen').forEach(s => s.style.display='none');
-            const login = document.getElementById('prism-login') || document.querySelector('.prism-screen');
-            if (login) login.style.display='flex';
+            prismScreen('prism-login-screen');
         }
 
         function prismSelectPlan(plan) {
@@ -24017,7 +24260,7 @@ async function _mtWaitForAuth(maxMs = 20000) {
                     btn.disabled=false; btn.textContent='📩 Submit Request';
                     return;
                 }
-                await window.db.collection(PRISM_SECURITY.COLLECTION).add({
+                const reqRef = await window.db.collection(PRISM_SECURITY.COLLECTION).add({
                     email:        email,
                     fullname:     name,
                     phone:        phone,
@@ -24030,6 +24273,21 @@ async function _mtWaitForAuth(maxMs = 20000) {
                     created_at:   new Date().toISOString(),
                     requested_at: new Date().toISOString(),
                 });
+                // Notify SA admin via Firestore inbox
+                try {
+                    await window.db.collection('prism_admin_inbox').add({
+                        type:       'new_subscriber_request',
+                        urgent:     false,
+                        title:      '🏢 New Subscriber Request',
+                        message:    `${name} (${email}) wants to subscribe — ${orgname} · Plan: ${_selectedPlan.toUpperCase()}`,
+                        phone:      phone,
+                        orgname:    orgname,
+                        plan:       _selectedPlan,
+                        ref_doc:    reqRef.id,
+                        read:       false,
+                        created_at: new Date().toISOString(),
+                    });
+                } catch(e) { console.warn('[Request] Inbox notify failed (non-critical):', e); }
                 sucEl.textContent='✅ Request submitted! Our team will review and contact you within 24 hours.';
                 sucEl.style.display='block';
                 btn.textContent='✅ Submitted';
@@ -24046,11 +24304,9 @@ async function _mtWaitForAuth(maxMs = 20000) {
         }
         // ── ORG PICKER ──
         function mtShowOrgPicker(memberships) {
-            // Hide all splash screens
-            document.querySelectorAll('.prism-screen').forEach(s => s.style.display='none');
+            prismScreen('prism-org-picker');
             const screen = document.getElementById('prism-org-picker');
             if (!screen) return;
-            screen.style.display = 'flex';
 
             const list = document.getElementById('org-picker-list');
             if (!list) return;
@@ -24182,11 +24438,15 @@ async function _mtWaitForAuth(maxMs = 20000) {
                     });
                 } catch(e) {}
 
-                sucEl.textContent='✅ Account created! You can now sign in with your email and password.';
+                sucEl.textContent='✅ Account created! Signing you in...';
                 sucEl.style.display='block';
-                btn.textContent='✅ Done';
-                // Auto sign out — they need to sign in properly
-                try { await auth.signOut(); } catch(e) {}
+                btn.textContent='⏳ Signing in...';
+                // Auto sign in — no need to go back to login
+                // onAuthStateChanged will fire and route them correctly
+                // (they are already signed in from createUserWithEmailAndPassword)
+                setTimeout(() => {
+                    prismScreen('prism-connecting');
+                }, 1200);
 
             } catch(e) {
                 let msg = e.message || 'Registration failed.';
@@ -25938,7 +26198,9 @@ window.mtSAToggleOrgStatus=mtSAToggleOrgStatus;
 
         // ══ PRISM CINEMATIC NAVIGATION ══
         function prismScreen(id) {
-            ['prism-splash','prism-login-screen','prism-connecting'].forEach(s => {
+            // All known screens — add new ones here
+            ['prism-splash','prism-login-screen','prism-connecting',
+             'prism-request-screen','prism-staff-screen','prism-org-picker'].forEach(s => {
                 const el = document.getElementById(s);
                 if (el) el.classList.remove('active');
             });
@@ -26356,8 +26618,15 @@ window.mtSAToggleOrgStatus=mtSAToggleOrgStatus;
             _allowlistCacheTime = 0;
         }
 
+        function _updateSAPendingBadge(count) {
+            const badge = document.getElementById('sa-pending-badge');
+            if (!badge) return;
+            if (count > 0) { badge.textContent = count; badge.style.display = 'inline-block'; }
+            else { badge.style.display = 'none'; }
+        }
         function _renderAllowlist(users, orgNames, pendingEl, tableEl) {
             const pending  = users.filter(u => u.status === 'pending');
+            _updateSAPendingBadge(pending.length);
             const approved = users.filter(u => u.status !== 'pending');
             const statusColors = { approved:'#34d399', pending:'#fbbf24', suspended:'#f87171' };
             const roleColors   = { owner:'#a78bfa', admin:'#60a5fa', manager:'#34d399', cashier:'#fbbf24', viewer:'#94a3b8' };
