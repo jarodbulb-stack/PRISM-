@@ -303,6 +303,24 @@
             transition:all 0.2s; letter-spacing:0.05em;
         }
         .prism-signin-btn:hover { transform:translateY(-1px); box-shadow:0 8px 30px rgba(99,102,241,0.4); }
+        .prism-plan-card {
+            flex:1; padding:10px 6px; background:rgba(255,255,255,0.04);
+            border:1.5px solid rgba(255,255,255,0.1); border-radius:10px;
+            cursor:pointer; text-align:center; transition:all 0.2s;
+        }
+        .prism-plan-card:hover { border-color:#6366f1; background:rgba(99,102,241,0.08); }
+        .prism-plan-card.active { border-color:#6366f1; background:rgba(99,102,241,0.15); }
+        .prism-plan-name { font-size:0.72rem; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:4px; }
+        .prism-plan-price { font-size:1.1rem; font-weight:800; color:#f1f5f9; }
+        .prism-plan-price span { font-size:0.7rem; color:#64748b; font-weight:400; }
+        .prism-plan-note { font-size:0.68rem; color:#475569; margin-top:3px; }
+        .prism-form-input {
+            width:100%; padding:10px 12px; background:rgba(255,255,255,0.07);
+            border:1px solid rgba(255,255,255,0.15); border-radius:8px;
+            color:#f8fafc; font-size:0.88rem; outline:none; transition:border 0.2s;
+            box-sizing:border-box;
+        }
+        .prism-form-input:focus { border-color:#6366f1; }
         .prism-back-link { text-align:center; margin-top:20px; font-size:0.82rem; color:#475569; cursor:pointer; transition:color 0.2s; }
         .prism-back-link:hover { color:#94a3b8; }
 
@@ -3173,6 +3191,169 @@
                 </p>
 
                 <p class="prism-back-link" onclick="prismGoToSplash()">← Back to home</p>
+
+                <!-- Request Access link -->
+                <p style="text-align:center;margin:12px 0 0;">
+                    <span onclick="prismShowRequestAccess()" style="color:#6366f1;font-size:0.8rem;cursor:pointer;font-weight:600;letter-spacing:0.02em;">
+                        🏢 New subscriber? Request Access
+                    </span>
+                </p>
+                <p style="text-align:center;margin:4px 0 0;">
+                    <span onclick="prismShowStaffRegister()" style="color:#475569;font-size:0.75rem;cursor:pointer;">
+                        Already staff? Register here
+                    </span>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- REQUEST ACCESS SCREEN (New Subscriber) -->
+    <div id="prism-request-screen" class="prism-screen" style="display:none;">
+        <div class="prism-login-wrap">
+            <div class="prism-login-card">
+                <div class="prism-card-logo">
+                    <svg viewBox="0 0 40 40" fill="none" width="36" height="36">
+                        <polygon points="20,2 38,36 2,36" stroke="rgba(99,188,255,0.9)" stroke-width="1.5" fill="rgba(99,188,255,0.07)"/>
+                    </svg>
+                    <span>PRISM</span>
+                </div>
+                <h2 class="prism-card-title" style="font-size:1.3rem;">Subscribe to PRISM</h2>
+                <p class="prism-card-sub">Create your organization account</p>
+
+                <!-- Plan selector (placeholder) -->
+                <div style="display:flex;gap:8px;margin-bottom:16px;">
+                    <div class="prism-plan-card active" id="plan-basic" onclick="prismSelectPlan('basic')">
+                        <div class="prism-plan-name">Basic</div>
+                        <div class="prism-plan-price">₱299<span>/mo</span></div>
+                        <div class="prism-plan-note">Up to 2 users</div>
+                    </div>
+                    <div class="prism-plan-card" id="plan-standard" onclick="prismSelectPlan('standard')">
+                        <div class="prism-plan-name">Standard</div>
+                        <div class="prism-plan-price">₱599<span>/mo</span></div>
+                        <div class="prism-plan-note">Up to 5 users</div>
+                    </div>
+                    <div class="prism-plan-card" id="plan-enterprise" onclick="prismSelectPlan('enterprise')">
+                        <div class="prism-plan-name">Enterprise</div>
+                        <div class="prism-plan-price">₱999<span>/mo</span></div>
+                        <div class="prism-plan-note">Unlimited</div>
+                    </div>
+                </div>
+
+                <div style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.2);border-radius:8px;padding:10px 12px;font-size:0.75rem;color:#818cf8;margin-bottom:14px;text-align:center;">
+                    💳 Online payment coming soon — your request will be reviewed and activated manually by our team.<br>
+                    <span style="color:#475569;margin-top:4px;display:block;">Already a staff member in another org? You can still request your own organization using the same email.</span>
+                </div>
+
+                <div id="prism-request-error" class="prism-login-error" style="display:none;"></div>
+                <div id="prism-request-success" style="display:none;background:rgba(16,185,129,0.1);border:1px solid #10b981;color:#34d399;padding:12px;border-radius:8px;font-size:0.85rem;text-align:center;margin-bottom:12px;"></div>
+
+                <div class="prism-field">
+                    <label>Full Name *</label>
+                    <input type="text" id="req-name" class="prism-form-input" placeholder="Your full name"/>
+                </div>
+                <div class="prism-field">
+                    <label>Email Address *</label>
+                    <input type="email" id="req-email" class="prism-form-input" placeholder="your@email.com"/>
+                </div>
+                <div class="prism-field">
+                    <label>Phone Number *</label>
+                    <input type="tel" id="req-phone" class="prism-form-input" placeholder="09XXXXXXXXX"/>
+                </div>
+                <div class="prism-field">
+                    <label>Business / Organization Name *</label>
+                    <input type="text" id="req-orgname" class="prism-form-input" placeholder="e.g. Santos Apartments"/>
+                </div>
+                <div class="prism-field">
+                    <label>Business Type</label>
+                    <select id="req-biztype" class="prism-form-input" style="background:#0f172a;color:#f1f5f9;">
+                        <option value="rental">Rental / Properties</option>
+                        <option value="water">Water Refilling</option>
+                        <option value="mixed">Mixed / Both</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+
+                <button class="prism-signin-btn" id="req-submit-btn" onclick="prismSubmitAccessRequest()" style="margin-top:4px;">
+                    📩 Submit Request
+                </button>
+
+                <p style="text-align:center;margin-top:12px;">
+                    <span onclick="prismBackToLogin()" style="color:#475569;font-size:0.8rem;cursor:pointer;">← Back to Sign In</span>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- STAFF REGISTER SCREEN -->
+    <div id="prism-staff-screen" class="prism-screen" style="display:none;">
+        <div class="prism-login-wrap">
+            <div class="prism-login-card">
+                <div class="prism-card-logo">
+                    <svg viewBox="0 0 40 40" fill="none" width="36" height="36">
+                        <polygon points="20,2 38,36 2,36" stroke="rgba(99,188,255,0.9)" stroke-width="1.5" fill="rgba(99,188,255,0.07)"/>
+                    </svg>
+                    <span>PRISM</span>
+                </div>
+                <h2 class="prism-card-title" style="font-size:1.3rem;">Staff Registration</h2>
+                <p class="prism-card-sub" style="font-size:0.8rem;">Register with the email your admin added to PRISM</p>
+
+                <div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:8px;padding:10px 12px;font-size:0.75rem;color:#fbbf24;margin-bottom:14px;">
+                    ⚠️ Your email must be pre-approved by your organization's admin before you can register. Contact your admin if you're unsure.
+                </div>
+
+                <div id="prism-staff-error" class="prism-login-error" style="display:none;"></div>
+                <div id="prism-staff-success" style="display:none;background:rgba(16,185,129,0.1);border:1px solid #10b981;color:#34d399;padding:12px;border-radius:8px;font-size:0.85rem;text-align:center;margin-bottom:12px;"></div>
+
+                <div class="prism-field">
+                    <label>Full Name *</label>
+                    <input type="text" id="staff-name" class="prism-form-input" placeholder="Your full name"/>
+                </div>
+                <div class="prism-field">
+                    <label>Email Address *</label>
+                    <input type="email" id="staff-email" class="prism-form-input" placeholder="your@email.com"/>
+                </div>
+                <div class="prism-field">
+                    <label>Password *</label>
+                    <div style="position:relative;">
+                        <input type="password" id="staff-password" class="prism-form-input" placeholder="Min 6 characters" style="padding-right:40px;"/>
+                        <button class="prism-eye-btn" onclick="mtTogglePass('staff-password',this)" tabindex="-1">👁</button>
+                    </div>
+                </div>
+                <div class="prism-field">
+                    <label>Confirm Password *</label>
+                    <div style="position:relative;">
+                        <input type="password" id="staff-confirm" class="prism-form-input" placeholder="Repeat password" style="padding-right:40px;"/>
+                        <button class="prism-eye-btn" onclick="mtTogglePass('staff-confirm',this)" tabindex="-1">👁</button>
+                    </div>
+                </div>
+
+                <button class="prism-signin-btn" id="staff-submit-btn" onclick="prismSubmitStaffRegister()">
+                    Create Staff Account
+                </button>
+
+                <p style="text-align:center;margin-top:12px;">
+                    <span onclick="prismBackToLogin()" style="color:#475569;font-size:0.8rem;cursor:pointer;">← Back to Sign In</span>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ORG PICKER SCREEN — shown when user belongs to multiple orgs -->
+    <div id="prism-org-picker" class="prism-screen" style="display:none;">
+        <div class="prism-login-wrap">
+            <div class="prism-login-card" style="max-width:460px;">
+                <div class="prism-card-logo">
+                    <svg viewBox="0 0 40 40" fill="none" width="36" height="36">
+                        <polygon points="20,2 38,36 2,36" stroke="rgba(99,188,255,0.9)" stroke-width="1.5" fill="rgba(99,188,255,0.07)"/>
+                    </svg>
+                    <span>PRISM</span>
+                </div>
+                <h2 class="prism-card-title" style="font-size:1.25rem;">Choose Organization</h2>
+                <p class="prism-card-sub">You belong to multiple organizations. Which one do you want to open?</p>
+                <div id="org-picker-list" style="display:flex;flex-direction:column;gap:10px;margin-top:8px;"></div>
+                <p style="text-align:center;margin-top:16px;">
+                    <span onclick="mtLogout()" style="color:#475569;font-size:0.78rem;cursor:pointer;">← Sign out</span>
+                </p>
             </div>
         </div>
     </div>
@@ -23760,6 +23941,268 @@ async function _mtWaitForAuth(maxMs = 20000) {
                 showToast(codes[e.code] || '❌ Error: ' + e.message, 'error');
             }
         }
+
+        // ── SCREEN NAVIGATION ──
+        let _selectedPlan = 'basic';
+
+        function prismShowRequestAccess() {
+            document.querySelectorAll('.prism-screen').forEach(s => s.style.display='none');
+            const s = document.getElementById('prism-request-screen');
+            if (s) s.style.display='flex';
+            // Clear form
+            ['req-name','req-email','req-phone','req-orgname'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.value='';
+            });
+            document.getElementById('prism-request-error').style.display='none';
+            document.getElementById('prism-request-success').style.display='none';
+        }
+
+        function prismShowStaffRegister() {
+            document.querySelectorAll('.prism-screen').forEach(s => s.style.display='none');
+            const s = document.getElementById('prism-staff-screen');
+            if (s) s.style.display='flex';
+            ['staff-name','staff-email','staff-password','staff-confirm'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.value='';
+            });
+            document.getElementById('prism-staff-error').style.display='none';
+            document.getElementById('prism-staff-success').style.display='none';
+        }
+
+        function prismBackToLogin() {
+            document.querySelectorAll('.prism-screen').forEach(s => s.style.display='none');
+            const login = document.getElementById('prism-login') || document.querySelector('.prism-screen');
+            if (login) login.style.display='flex';
+        }
+
+        function prismSelectPlan(plan) {
+            _selectedPlan = plan;
+            ['basic','standard','enterprise'].forEach(p => {
+                const el = document.getElementById('plan-'+p);
+                if (el) el.classList.toggle('active', p===plan);
+            });
+        }
+
+        // ── SUBMIT ACCESS REQUEST (new subscriber) ──
+        async function prismSubmitAccessRequest() {
+            const name    = (document.getElementById('req-name')?.value||'').trim();
+            const email   = (document.getElementById('req-email')?.value||'').trim().toLowerCase();
+            const phone   = (document.getElementById('req-phone')?.value||'').trim();
+            const orgname = (document.getElementById('req-orgname')?.value||'').trim();
+            const biztype = document.getElementById('req-biztype')?.value||'rental';
+            const errEl   = document.getElementById('prism-request-error');
+            const sucEl   = document.getElementById('prism-request-success');
+            const btn     = document.getElementById('req-submit-btn');
+
+            errEl.style.display='none'; sucEl.style.display='none';
+            if (!name)    { errEl.textContent='Please enter your full name.';    errEl.style.display='block'; return; }
+            if (!email || !email.includes('@')) { errEl.textContent='Please enter a valid email.'; errEl.style.display='block'; return; }
+            if (!phone)   { errEl.textContent='Please enter your phone number.'; errEl.style.display='block'; return; }
+            if (!orgname) { errEl.textContent='Please enter your business name.'; errEl.style.display='block'; return; }
+
+            btn.disabled=true; btn.textContent='⏳ Submitting...';
+            try {
+                if (!window.db) throw new Error('No connection to server. Please try again.');
+                // Allow same email to request multiple orgs — each org is a separate allowlist entry
+                // Check if this exact email+orgname combo already submitted (prevent duplicate requests)
+                const existing = await window.db.collection(PRISM_SECURITY.COLLECTION)
+                    .where('email','==',email)
+                    .where('orgname','==',orgname)
+                    .where('status','==','pending')
+                    .limit(1).get();
+                if (!existing.empty) {
+                    errEl.textContent='You already have a pending request for this organization. Please wait for admin approval.';
+                    errEl.style.display='block';
+                    btn.disabled=false; btn.textContent='📩 Submit Request';
+                    return;
+                }
+                await window.db.collection(PRISM_SECURITY.COLLECTION).add({
+                    email:        email,
+                    fullname:     name,
+                    phone:        phone,
+                    orgname:      orgname,
+                    biztype:      biztype,
+                    plan:         _selectedPlan,
+                    role:         'owner',
+                    status:       'pending',
+                    request_type: 'new_subscriber',
+                    created_at:   new Date().toISOString(),
+                    requested_at: new Date().toISOString(),
+                });
+                sucEl.textContent='✅ Request submitted! Our team will review and contact you within 24 hours.';
+                sucEl.style.display='block';
+                btn.textContent='✅ Submitted';
+                // Clear form
+                ['req-name','req-email','req-phone','req-orgname'].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) el.value='';
+                });
+            } catch(e) {
+                errEl.textContent='Error: ' + (e.message||'Could not submit. Check your connection.');
+                errEl.style.display='block';
+                btn.disabled=false; btn.textContent='📩 Submit Request';
+            }
+        }
+        // ── ORG PICKER ──
+        function mtShowOrgPicker(memberships) {
+            // Hide all splash screens
+            document.querySelectorAll('.prism-screen').forEach(s => s.style.display='none');
+            const screen = document.getElementById('prism-org-picker');
+            if (!screen) return;
+            screen.style.display = 'flex';
+
+            const list = document.getElementById('org-picker-list');
+            if (!list) return;
+            list.innerHTML = memberships.map((m, i) => {
+                const roleBadge = {
+                    owner:   { color:'#f59e0b', bg:'rgba(245,158,11,0.15)',  icon:'👑' },
+                    admin:   { color:'#6366f1', bg:'rgba(99,102,241,0.15)',  icon:'🛡️' },
+                    manager: { color:'#3b82f6', bg:'rgba(59,130,246,0.15)',  icon:'📋' },
+                    cashier: { color:'#10b981', bg:'rgba(16,185,129,0.15)',  icon:'💰' },
+                    viewer:  { color:'#64748b', bg:'rgba(100,116,139,0.15)', icon:'👁️' },
+                }[m.role] || { color:'#94a3b8', bg:'rgba(148,163,184,0.1)', icon:'👤' };
+
+                const orgLabel = m.orgname || m.organization_id || 'Organization ' + (i+1);
+                return `<button onclick="mtPickOrg(${i})" style="
+                    width:100%; padding:14px 16px; text-align:left;
+                    background:rgba(255,255,255,0.04); border:1.5px solid rgba(255,255,255,0.1);
+                    border-radius:12px; cursor:pointer; transition:all 0.2s; color:#f1f5f9;
+                    display:flex; align-items:center; gap:12px;
+                " onmouseover="this.style.borderColor='#6366f1';this.style.background='rgba(99,102,241,0.08)'"
+                   onmouseout="this.style.borderColor='rgba(255,255,255,0.1)';this.style.background='rgba(255,255,255,0.04)'">
+                    <div style="font-size:1.4rem;">${roleBadge.icon}</div>
+                    <div style="flex:1;">
+                        <div style="font-weight:700;font-size:0.95rem;">${orgLabel}</div>
+                        <div style="font-size:0.75rem;color:#64748b;margin-top:2px;">
+                            ${m.biztype ? m.biztype.charAt(0).toUpperCase()+m.biztype.slice(1)+' · ' : ''}
+                            <span style="color:${roleBadge.color};font-weight:600;">${(m.role||'viewer').toUpperCase()}</span>
+                        </div>
+                    </div>
+                    <div style="color:#334155;font-size:1.2rem;">→</div>
+                </button>`;
+            }).join('');
+
+            // Store memberships for mtPickOrg
+            window._orgPickerMemberships = memberships;
+        }
+
+        async function mtPickOrg(index) {
+            const memberships = window._orgPickerMemberships || [];
+            const picked = memberships[index];
+            if (!picked) return;
+
+            // Set the chosen org's security data as the active session
+            MT._securityData = picked;
+            MT.currentOrgRole = picked.role || 'viewer';
+
+            // Load the org from Firestore if we have an org id
+            const orgId = picked.organization_id || picked.orgId || null;
+            if (orgId && window.db) {
+                try {
+                    const doc = await window.db.collection(MT.ORGS_COL).doc(orgId).get();
+                    if (doc.exists) {
+                        MT.currentOrg = { id: doc.id, ...doc.data() };
+                        localStorage.setItem('mt_current_org', JSON.stringify(MT.currentOrg));
+                        localStorage.setItem('mt_current_org_id', orgId);
+                        localStorage.setItem('mt_current_org_role', picked.role || 'viewer');
+                    }
+                } catch(e) { console.warn('[OrgPicker] Org load failed:', e); }
+            }
+
+            // Hide picker and proceed to app
+            document.querySelectorAll('.prism-screen').forEach(s => s.style.display='none');
+
+            // Check if org setup is needed (owner with no org yet)
+            if (!MT.currentOrg && (picked.role === 'owner' || picked.role === 'admin')) {
+                mtShowSetup();
+            } else if (MT.currentOrg) {
+                mtShowApp();
+                if (typeof prismStartSessionTimeout === 'function') prismStartSessionTimeout();
+                if (typeof prismStartHealthPing === 'function') prismStartHealthPing();
+                if (typeof prismCashierAutoTimeIn === 'function' && picked.role === 'cashier') prismCashierAutoTimeIn();
+            } else {
+                // No org found — show deny
+                PRISM_SECURITY.showDenyScreen('no_org', MT.currentUser?.email || '');
+            }
+        }
+        window.mtShowOrgPicker = mtShowOrgPicker;
+        window.mtPickOrg       = mtPickOrg;
+
+                window.prismSubmitAccessRequest = prismSubmitAccessRequest;
+
+        // ── STAFF REGISTER ──
+        async function prismSubmitStaffRegister() {
+            const name     = (document.getElementById('staff-name')?.value||'').trim();
+            const email    = (document.getElementById('staff-email')?.value||'').trim().toLowerCase();
+            const password = document.getElementById('staff-password')?.value||'';
+            const confirm  = document.getElementById('staff-confirm')?.value||'';
+            const errEl    = document.getElementById('prism-staff-error');
+            const sucEl    = document.getElementById('prism-staff-success');
+            const btn      = document.getElementById('staff-submit-btn');
+
+            errEl.style.display='none'; sucEl.style.display='none';
+            if (!name)    { errEl.textContent='Please enter your full name.'; errEl.style.display='block'; return; }
+            if (!email || !email.includes('@')) { errEl.textContent='Please enter a valid email.'; errEl.style.display='block'; return; }
+            if (!password || password.length < 6) { errEl.textContent='Password must be at least 6 characters.'; errEl.style.display='block'; return; }
+            if (password !== confirm) { errEl.textContent='Passwords do not match.'; errEl.style.display='block'; return; }
+
+            btn.disabled=true; btn.textContent='⏳ Creating account...';
+            try {
+                const auth = await _mtWaitForAuth();
+                if (!auth) throw new Error('Cannot connect. Please refresh and try again.');
+
+                // Check if email is pre-approved in allowlist
+                const snap = await window.db.collection(PRISM_SECURITY.COLLECTION)
+                    .where('email','==',email).limit(1).get();
+                if (snap.empty) {
+                    errEl.textContent='Your email is not yet approved by your admin. Contact your organization admin first.';
+                    errEl.style.display='block';
+                    btn.disabled=false; btn.textContent='Create Staff Account';
+                    return;
+                }
+                const userDoc = snap.docs[0].data();
+                if (userDoc.status === 'suspended') {
+                    errEl.textContent='Your account has been suspended. Contact your admin.';
+                    errEl.style.display='block';
+                    btn.disabled=false; btn.textContent='Create Staff Account';
+                    return;
+                }
+
+                // Create Firebase auth account
+                const userCred = await auth.createUserWithEmailAndPassword(email, password);
+                await userCred.user.updateProfile({ displayName: name });
+
+                // Update allowlist entry with UID
+                try {
+                    await snap.docs[0].ref.update({
+                        uid: userCred.user.uid,
+                        fullname: name,
+                        registered_at: new Date().toISOString(),
+                    });
+                } catch(e) {}
+
+                sucEl.textContent='✅ Account created! You can now sign in with your email and password.';
+                sucEl.style.display='block';
+                btn.textContent='✅ Done';
+                // Auto sign out — they need to sign in properly
+                try { await auth.signOut(); } catch(e) {}
+
+            } catch(e) {
+                let msg = e.message || 'Registration failed.';
+                if (e.code === 'auth/email-already-in-use') msg = 'This email already has an account. Try signing in instead.';
+                errEl.textContent=msg;
+                errEl.style.display='block';
+                btn.disabled=false; btn.textContent='Create Staff Account';
+            }
+        }
+        window.prismSubmitStaffRegister = prismSubmitStaffRegister;
+        window.prismShowRequestAccess   = prismShowRequestAccess;
+        window.prismShowStaffRegister   = prismShowStaffRegister;
+        window.prismBackToLogin         = prismBackToLogin;
+        window.prismSelectPlan          = prismSelectPlan;
+
+
         window.prismForgotPassword = prismForgotPassword;
 
         async function mtLogin() {
@@ -25278,6 +25721,14 @@ async function mtInit() {
                             .doc(user.uid).update({ uid: user.uid }); } catch(e) {}
                     }
                     MT._securityData = _check.data || null;
+                    MT._allMemberships = _check.memberships || null;
+
+                    // Multiple orgs — show picker before proceeding
+                    if (_check.needsPicker && _check.memberships && _check.memberships.length > 1) {
+                        mtHideLoading();
+                        mtShowOrgPicker(_check.memberships);
+                        return;
+                    }
                 } else {
                     PRISM_SECURITY.ensureSuperAdminEntry(user.email);
                 }
@@ -25597,42 +26048,49 @@ window.mtSAToggleOrgStatus=mtSAToggleOrgStatus;
                     const emailKey = email.toLowerCase().trim();
                     const firebaseUid = uid || (window.auth && window.auth.currentUser && window.auth.currentUser.uid);
 
-                    // Step 1: Try UID-keyed doc first (the RLS-compatible path)
-                    if (firebaseUid) {
-                        const uidDoc = await window.db.collection(PRISM_SECURITY.COLLECTION).doc(firebaseUid).get();
-                        if (uidDoc.exists) {
-                            const data = uidDoc.data();
-                            if (data.status === 'pending')   return { allowed: false, reason: 'pending',   data };
-                            if (data.status === 'suspended') return { allowed: false, reason: 'suspended', data };
-                            if (data.status === 'approved')  return { allowed: true,  reason: 'approved',  data, id: uidDoc.id };
-                            return { allowed: false, reason: 'unknown_status', data };
-                        }
-                    }
-
-                    // Step 2: Fall back to email query (admin pre-added before user registered)
+                    // Query ALL allowlist entries for this email (supports multi-org same email)
                     const snap = await window.db.collection(PRISM_SECURITY.COLLECTION)
                         .where('email', '==', emailKey).get();
+
                     if (snap.empty) return { allowed: false, reason: 'not_registered' };
 
-                    const doc = snap.docs[0];
-                    const data = doc.data();
-
-                    // Step 3: Migrate — stamp UID onto the doc so future lookups use UID key
-                    // If doc ID is not a UID (i.e. it's an auto-ID), re-create it with UID as key
-                    if (firebaseUid && doc.id !== firebaseUid && data.status === 'approved') {
-                        try {
-                            await window.db.collection(PRISM_SECURITY.COLLECTION).doc(firebaseUid).set({
-                                ...data, uid: firebaseUid, migrated_at: new Date().toISOString(),
-                            });
-                            await doc.ref.delete(); // Remove the old auto-ID doc
-                            console.info('[Security] Allowlist doc migrated to UID key:', firebaseUid);
-                        } catch(me) { console.warn('[Security] Migration failed (non-critical):', me); }
+                    // Stamp UID onto all docs for this email (so we can find them later)
+                    if (firebaseUid) {
+                        snap.docs.forEach(async doc => {
+                            if (!doc.data().uid) {
+                                try { await doc.ref.update({ uid: firebaseUid }); } catch(e) {}
+                            }
+                        });
                     }
 
-                    if (data.status === 'pending')   return { allowed: false, reason: 'pending',   data };
-                    if (data.status === 'suspended') return { allowed: false, reason: 'suspended', data };
-                    if (data.status === 'approved')  return { allowed: true,  reason: 'approved',  data, id: doc.id };
-                    return { allowed: false, reason: 'unknown_status', data };
+                    // Filter to approved memberships only
+                    const approved = snap.docs.filter(d => d.data().status === 'approved');
+                    const pending  = snap.docs.filter(d => d.data().status === 'pending');
+                    const suspended= snap.docs.filter(d => d.data().status === 'suspended');
+
+                    // All suspended — no active memberships at all
+                    if (approved.length === 0 && suspended.length > 0 && pending.length === 0) {
+                        return { allowed: false, reason: 'suspended', data: suspended[0].data() };
+                    }
+                    // Only pending
+                    if (approved.length === 0 && pending.length > 0) {
+                        return { allowed: false, reason: 'pending', data: pending[0].data() };
+                    }
+                    // No approved entries
+                    if (approved.length === 0) {
+                        return { allowed: false, reason: 'not_registered' };
+                    }
+
+                    // One approved membership — go straight in
+                    if (approved.length === 1) {
+                        const doc  = approved[0];
+                        const data = doc.data();
+                        return { allowed: true, reason: 'approved', data, id: doc.id };
+                    }
+
+                    // Multiple approved memberships — needs org picker
+                    const memberships = approved.map(d => ({ id: d.id, ...d.data() }));
+                    return { allowed: true, reason: 'approved', needsPicker: true, memberships, data: memberships[0] };
 
                 } catch(e) {
                     console.warn('[Security] Allowlist check failed:', e);
@@ -25908,15 +26366,34 @@ window.mtSAToggleOrgStatus=mtSAToggleOrgStatus;
             if (pendingEl) {
                 pendingEl.innerHTML = pending.length === 0
                     ? '<div style="color:#64748b;font-size:0.85rem;">No pending approvals ✅</div>'
-                    : pending.map(u => `
-                        <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.15);border-radius:8px;flex-wrap:wrap;">
-                            <div style="flex:1;min-width:160px;"><div style="color:#f1f5f9;font-size:0.88rem;font-weight:600;">${u.email}</div><div style="color:#64748b;font-size:0.75rem;">Requested: ${u.requested_at?new Date(u.requested_at).toLocaleDateString('en-PH'):'N/A'}</div></div>
-                            <select id="approve-role-${u.id}" style="padding:6px 10px;background:#1e293b;border:1px solid #334155;border-radius:6px;color:#f1f5f9;font-size:0.8rem;">
-                                ${['viewer','cashier','manager','admin','owner'].map(r=>`<option value="${r}">${r}</option>`).join('')}
-                            </select>
-                            <button onclick="mtSAApproveUser('${u.id}')" style="padding:6px 14px;background:rgba(16,185,129,0.15);border:1px solid #10b981;color:#34d399;border-radius:6px;cursor:pointer;font-size:0.8rem;font-weight:700;">✅ Approve</button>
-                            <button onclick="mtSARejectUser('${u.id}')" style="padding:6px 14px;background:rgba(239,68,68,0.1);border:1px solid #ef4444;color:#f87171;border-radius:6px;cursor:pointer;font-size:0.8rem;font-weight:700;">❌ Reject</button>
-                        </div>`).join('');
+                    : pending.map(u => {
+                        const isSubscriber = u.request_type === 'new_subscriber';
+                        const badge = isSubscriber
+                            ? '<span style="background:rgba(99,102,241,0.2);color:#818cf8;font-size:0.68rem;font-weight:700;padding:2px 8px;border-radius:20px;margin-left:6px;">🏢 NEW SUBSCRIBER</span>'
+                            : '<span style="background:rgba(245,158,11,0.15);color:#fbbf24;font-size:0.68rem;font-weight:700;padding:2px 8px;border-radius:20px;margin-left:6px;">👤 STAFF</span>';
+                        const extra = isSubscriber ? `
+                            <div style="font-size:0.75rem;color:#94a3b8;margin-top:3px;">
+                                ${u.fullname?`<span style="color:#e2e8f0;">${u.fullname}</span> · `:''}
+                                ${u.phone?`📞 ${u.phone} · `:''}
+                                ${u.orgname?`🏢 <em>${u.orgname}</em> · `:''}
+                                ${u.plan?`<span style="color:#818cf8;">Plan: ${u.plan.toUpperCase()}</span>`:''}
+                            </div>` : '';
+                        const defaultRole = isSubscriber ? 'owner' : (u.role||'cashier');
+                        return `<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 14px;background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.15);border-radius:8px;flex-wrap:wrap;">
+                            <div style="flex:1;min-width:200px;">
+                                <div style="color:#f1f5f9;font-size:0.88rem;font-weight:600;">${u.email}${badge}</div>
+                                ${extra}
+                                <div style="color:#64748b;font-size:0.72rem;margin-top:3px;">Requested: ${u.requested_at?new Date(u.requested_at).toLocaleDateString('en-PH'):'N/A'}</div>
+                            </div>
+                            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                                <select id="approve-role-${u.id}" style="padding:6px 10px;background:#1e293b;border:1px solid #334155;border-radius:6px;color:#f1f5f9;font-size:0.8rem;">
+                                    ${['viewer','cashier','manager','admin','owner'].map(r=>`<option value="${r}"${r===defaultRole?' selected':''}>${r}</option>`).join('')}
+                                </select>
+                                <button onclick="mtSAApproveUser('${u.id}')" style="padding:6px 14px;background:rgba(16,185,129,0.15);border:1px solid #10b981;color:#34d399;border-radius:6px;cursor:pointer;font-size:0.8rem;font-weight:700;">✅ Approve</button>
+                                <button onclick="mtSARejectUser('${u.id}')" style="padding:6px 14px;background:rgba(239,68,68,0.1);border:1px solid #ef4444;color:#f87171;border-radius:6px;cursor:pointer;font-size:0.8rem;font-weight:700;">❌ Reject</button>
+                            </div>
+                        </div>`;
+                    }).join('');
             }
 
             // ── Group by organization ──
@@ -25980,7 +26457,19 @@ window.mtSAToggleOrgStatus=mtSAToggleOrgStatus;
             mtToast('⏳ Approving user...', 'info');
             const roleEl = document.getElementById('approve-role-'+docId);
             const role = roleEl ? roleEl.value : 'viewer';
-            try { await PRISM_SECURITY.approveUser(docId,role,null); mtToast('✅ Approved as '+role,'success'); _invalidateAllowlistCache(); mtSALoadAllowlist(); }
+            try {
+                // Preserve orgname from the pending doc (subscriber's requested org)
+                const doc = await window.db.collection(PRISM_SECURITY.COLLECTION).doc(docId).get();
+                const existing = doc.exists ? doc.data() : {};
+                await PRISM_SECURITY.approveUser(docId, role, existing.organization_id || null);
+                // If this is a new subscriber (has orgname but no org yet), note it for SA to create org later
+                if (existing.request_type === 'new_subscriber' && !existing.organization_id) {
+                    mtToast('✅ Approved as ' + role + '. Remind them to log in and complete org setup.', 'success', 5000);
+                } else {
+                    mtToast('✅ Approved as ' + role, 'success');
+                }
+                _invalidateAllowlistCache(); mtSALoadAllowlist();
+            }
             catch(e){ mtToast('Error: '+e.message,'error'); }
         }
         async function mtSAApproveUserDirect(docId) {
