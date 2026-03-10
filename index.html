@@ -3492,7 +3492,7 @@
         <div id="mt-sa-allowlist" style="display:none;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
             <h3 style="margin:0;color:#f1f5f9;">🔐 Access Control — Allowed Users</h3>
-            <button onclick="mtSALoadAllowlist()" style="padding:8px 18px;background:rgba(99,102,241,0.15);border:1px solid #6366f1;color:#818cf8;border-radius:8px;cursor:pointer;font-size:0.85rem;font-weight:700;">🔄 Refresh</button>
+            <button onclick="mtSALoadAllowlist(true)" style="padding:8px 18px;background:rgba(99,102,241,0.15);border:1px solid #6366f1;color:#818cf8;border-radius:8px;cursor:pointer;font-size:0.85rem;font-weight:700;">🔄 Refresh</button>
         </div>
 
         <!-- Pending approvals -->
@@ -25721,9 +25721,9 @@ window.mtSAToggleOrgStatus=mtSAToggleOrgStatus;
             // ── Get all users (for admin panel) ──
             async getAllUsers() {
                 if (!window.db) return [];
-                const snap = await window.db.collection(PRISM_SECURITY.COLLECTION)
-                    .orderBy('created_at', 'desc').get();
-                return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                const snap = await window.db.collection(PRISM_SECURITY.COLLECTION).get();
+                const users = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                return users.sort((a,b) => (b.created_at||'').localeCompare(a.created_at||''));
             },
 
             // ── Deny access with a friendly screen ──
@@ -25841,125 +25841,138 @@ window.mtSAToggleOrgStatus=mtSAToggleOrgStatus;
                     await window.db.collection('prism_allowed_users').doc(docId).delete();
                 }
                 mtToast('✅ User account entry deleted. Re-add them anytime via Add User.', 'success');
-                setTimeout(() => mtSALoadAllowlist(), 800);
+                _invalidateAllowlistCache(); setTimeout(() => mtSALoadAllowlist(true), 400);
             } catch(e) {
                 mtToast('❌ Failed: ' + (e.message || e), 'error');
             }
         }
         window.mtSADeleteUserAccount = mtSADeleteUserAccount;
 
-        async function mtSALoadAllowlist() {
+        // Cache for allowlist data — avoids re-fetching on every tab click
+        let _allowlistCache = null;
+        let _allowlistCacheTime = 0;
+        const _ALLOWLIST_CACHE_TTL = 60000; // 60 seconds
+
+        async function mtSALoadAllowlist(forceRefresh) {
             const pendingEl = document.getElementById('sa-pending-list');
             const tableEl   = document.getElementById('sa-allowlist-table');
+
+            // ── Serve from cache instantly if fresh ──
+            const now = Date.now();
+            if (!forceRefresh && _allowlistCache && (now - _allowlistCacheTime) < _ALLOWLIST_CACHE_TTL) {
+                _renderAllowlist(_allowlistCache.users, _allowlistCache.orgNames, pendingEl, tableEl);
+                return;
+            }
+
             if (pendingEl) pendingEl.innerHTML = '<div style="color:#64748b;font-size:0.85rem;">Loading...</div>';
             if (tableEl)   tableEl.innerHTML   = '<div style="color:#64748b;font-size:0.85rem;">Loading...</div>';
+
             try {
-                const users = await PRISM_SECURITY.getAllUsers();
-                const pending = users.filter(u => u.status === 'pending');
-                const approved = users.filter(u => u.status !== 'pending');
-                const statusColors = { approved:'#34d399', pending:'#fbbf24', suspended:'#f87171' };
-                const roleColors   = { owner:'#a78bfa', admin:'#60a5fa', manager:'#34d399', cashier:'#fbbf24', viewer:'#94a3b8' };
-
-                // ── Pending approvals ──
-                if (pendingEl) {
-                    pendingEl.innerHTML = pending.length === 0
-                        ? '<div style="color:#64748b;font-size:0.85rem;">No pending approvals ✅</div>'
-                        : pending.map(u => `
-                            <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.15);border-radius:8px;flex-wrap:wrap;">
-                                <div style="flex:1;min-width:160px;"><div style="color:#f1f5f9;font-size:0.88rem;font-weight:600;">${u.email}</div><div style="color:#64748b;font-size:0.75rem;">Requested: ${u.requested_at?new Date(u.requested_at).toLocaleDateString('en-PH'):'N/A'}</div></div>
-                                <select id="approve-role-${u.id}" style="padding:6px 10px;background:#1e293b;border:1px solid #334155;border-radius:6px;color:#f1f5f9;font-size:0.8rem;">
-                                    ${['viewer','cashier','manager','admin','owner'].map(r=>`<option value="${r}">${r}</option>`).join('')}
-                                </select>
-                                <button onclick="mtSAApproveUser('${u.id}')" style="padding:6px 14px;background:rgba(16,185,129,0.15);border:1px solid #10b981;color:#34d399;border-radius:6px;cursor:pointer;font-size:0.8rem;font-weight:700;">✅ Approve</button>
-                                <button onclick="mtSARejectUser('${u.id}')" style="padding:6px 14px;background:rgba(239,68,68,0.1);border:1px solid #ef4444;color:#f87171;border-radius:6px;cursor:pointer;font-size:0.8rem;font-weight:700;">❌ Reject</button>
-                            </div>`).join('');
-                }
-
-                // ── Group approved/all users by organization ──
-                if (tableEl) {
-                    if (approved.length === 0) {
-                        tableEl.innerHTML = '<div style="color:#64748b;font-size:0.85rem;">No users yet.</div>';
-                    } else {
-                        // Build org→users map
-                        const orgMap = {};
-                        approved.forEach(u => {
-                            const orgKey = u.organization_id || u.orgId || '—';
-                            if (!orgMap[orgKey]) orgMap[orgKey] = [];
-                            orgMap[orgKey].push(u);
-                        });
-
-                        // Try to get org names from Firestore
-                        const orgNames = {};
+                // ── Run both queries IN PARALLEL ──
+                const [users, orgNames] = await Promise.all([
+                    PRISM_SECURITY.getAllUsers(),
+                    (async () => {
+                        const names = {};
                         try {
-                            const orgsSnap = await window.db.collection('prism_orgs').get();
-                            orgsSnap.docs.forEach(d => { orgNames[d.id] = d.data().name || d.id; });
+                            const snap = await window.db.collection(MT.ORGS_COL).get();
+                            snap.docs.forEach(d => { names[d.id] = d.data().name || d.id; });
                         } catch(e) {}
+                        return names;
+                    })()
+                ]);
 
-                        const isSuperAdmin = MT.SUPER_ADMINS?.includes(MT.currentUser?.email);
+                // ── Cache the result ──
+                _allowlistCache = { users, orgNames };
+                _allowlistCacheTime = Date.now();
 
-                        let html_out = '';
-                        // Sort orgs: super admins first, then alphabetical
-                        const sortedOrgs = Object.keys(orgMap).sort((a,b) => {
-                            if (a === 'null' || a === '—') return -1;
-                            if (b === 'null' || b === '—') return 1;
-                            return (orgNames[a]||a).localeCompare(orgNames[b]||b);
-                        });
-
-                        sortedOrgs.forEach(orgId => {
-                            const orgUsers = orgMap[orgId];
-                            const orgLabel = orgId === 'null' || orgId === '—'
-                                ? '⚡ Platform / Super Admins'
-                                : (orgNames[orgId] || orgId);
-                            const userCount = orgUsers.length;
-
-                            html_out += `
-                            <div style="margin-bottom:24px;">
-                                <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #1e293b;">
-                                    <span style="font-size:0.72rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#6366f1;">${orgLabel}</span>
-                                    <span style="background:rgba(99,102,241,0.12);color:#818cf8;font-size:0.68rem;font-weight:700;padding:2px 8px;border-radius:20px;">${userCount} user${userCount!==1?'s':''}</span>
-                                </div>
-                                <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
-                                    <thead><tr style="color:#475569;text-align:left;border-bottom:1px solid #1e293b;font-size:0.72rem;">
-                                        <th style="padding:6px 10px;">Email</th>
-                                        <th style="padding:6px 10px;">Role</th>
-                                        <th style="padding:6px 10px;">Status</th>
-                                        <th style="padding:6px 10px;">Added</th>
-                                        <th style="padding:6px 10px;">Actions</th>
-                                    </tr></thead>
-                                    <tbody>
-                                    ${orgUsers
-                                        .sort((a,b) => {
-                                            const order = {owner:0,admin:1,manager:2,cashier:3,viewer:4};
-                                            return (order[a.role]??5) - (order[b.role]??5);
-                                        })
-                                        .map(u => `<tr style="border-bottom:1px solid #0f172a;">
-                                        <td style="padding:8px 10px;color:#e2e8f0;">${u.email}</td>
-                                        <td style="padding:8px 10px;">
-                                            <select onchange="mtSAUpdateRole('${u.id}',this.value)" style="padding:4px 8px;background:#1e293b;border:1px solid #334155;border-radius:5px;color:${roleColors[u.role]||'#94a3b8'};font-size:0.78rem;">
-                                                ${['owner','admin','manager','cashier','viewer'].map(r=>`<option value="${r}"${u.role===r?' selected':''}>${r}</option>`).join('')}
-                                            </select>
-                                        </td>
-                                        <td style="padding:8px 10px;"><span style="color:${statusColors[u.status]||'#94a3b8'};font-weight:600;font-size:0.78rem;">${(u.status||'').toUpperCase()}</span></td>
-                                        <td style="padding:8px 10px;color:#64748b;font-size:0.78rem;">${u.created_at?new Date(u.created_at).toLocaleDateString('en-PH'):'-'}</td>
-                                        <td style="padding:8px 10px;">
-                                            <div style="display:flex;gap:5px;flex-wrap:wrap;">
-                                                ${u.status!=='approved'?`<button onclick="mtSAApproveUserDirect('${u.id}')" style="padding:4px 10px;background:rgba(16,185,129,0.1);border:1px solid #10b981;color:#34d399;border-radius:5px;cursor:pointer;font-size:0.73rem;">Approve</button>`:''}
-                                                ${u.status!=='suspended'?`<button onclick="mtSASuspendUser('${u.id}')" style="padding:4px 10px;background:rgba(239,68,68,0.08);border:1px solid #ef4444;color:#f87171;border-radius:5px;cursor:pointer;font-size:0.73rem;">Suspend</button>`:`<button onclick="mtSAUnsuspendUser('${u.id}')" style="padding:4px 10px;background:rgba(99,102,241,0.1);border:1px solid #6366f1;color:#818cf8;border-radius:5px;cursor:pointer;font-size:0.73rem;">Unsuspend</button>`}
-                                                <button onclick="mtSASendPasswordReset('${u.email}')" style="padding:4px 10px;background:rgba(251,191,36,0.08);border:1px solid #f59e0b;color:#fbbf24;border-radius:5px;cursor:pointer;font-size:0.73rem;" title="Send password reset email">🔑 Reset PW</button>
-                                                <button onclick="mtSADeleteUserAccount('${u.id}','${u.email}')" style="padding:4px 10px;background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.4);color:#f87171;border-radius:5px;cursor:pointer;font-size:0.73rem;">🗑 Delete</button>
-                                            </div>
-                                        </td>
-                                    </tr>`).join('')}
-                                    </tbody>
-                                </table>
-                            </div>`;
-                        });
-                        tableEl.innerHTML = html_out;
-                    }
-                }
+                _renderAllowlist(users, orgNames, pendingEl, tableEl);
             } catch(e) {
-                if (tableEl) tableEl.innerHTML = '<div style="color:#ef4444;">Error loading users: ' + (e.message||e) + '</div>';
+                if (tableEl) tableEl.innerHTML = '<div style="color:#ef4444;padding:12px;">Error loading users: ' + (e.message||e) + '</div>';
                 mtToast('Error loading users: ' + (e.message||e), 'error');
+            }
+        }
+
+        // ── Invalidate cache after any user action ──
+        function _invalidateAllowlistCache() {
+            _allowlistCache = null;
+            _allowlistCacheTime = 0;
+        }
+
+        function _renderAllowlist(users, orgNames, pendingEl, tableEl) {
+            const pending  = users.filter(u => u.status === 'pending');
+            const approved = users.filter(u => u.status !== 'pending');
+            const statusColors = { approved:'#34d399', pending:'#fbbf24', suspended:'#f87171' };
+            const roleColors   = { owner:'#a78bfa', admin:'#60a5fa', manager:'#34d399', cashier:'#fbbf24', viewer:'#94a3b8' };
+
+            // ── Pending approvals ──
+            if (pendingEl) {
+                pendingEl.innerHTML = pending.length === 0
+                    ? '<div style="color:#64748b;font-size:0.85rem;">No pending approvals ✅</div>'
+                    : pending.map(u => `
+                        <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.15);border-radius:8px;flex-wrap:wrap;">
+                            <div style="flex:1;min-width:160px;"><div style="color:#f1f5f9;font-size:0.88rem;font-weight:600;">${u.email}</div><div style="color:#64748b;font-size:0.75rem;">Requested: ${u.requested_at?new Date(u.requested_at).toLocaleDateString('en-PH'):'N/A'}</div></div>
+                            <select id="approve-role-${u.id}" style="padding:6px 10px;background:#1e293b;border:1px solid #334155;border-radius:6px;color:#f1f5f9;font-size:0.8rem;">
+                                ${['viewer','cashier','manager','admin','owner'].map(r=>`<option value="${r}">${r}</option>`).join('')}
+                            </select>
+                            <button onclick="mtSAApproveUser('${u.id}')" style="padding:6px 14px;background:rgba(16,185,129,0.15);border:1px solid #10b981;color:#34d399;border-radius:6px;cursor:pointer;font-size:0.8rem;font-weight:700;">✅ Approve</button>
+                            <button onclick="mtSARejectUser('${u.id}')" style="padding:6px 14px;background:rgba(239,68,68,0.1);border:1px solid #ef4444;color:#f87171;border-radius:6px;cursor:pointer;font-size:0.8rem;font-weight:700;">❌ Reject</button>
+                        </div>`).join('');
+            }
+
+            // ── Group by organization ──
+            if (tableEl) {
+                if (approved.length === 0) {
+                    tableEl.innerHTML = '<div style="color:#64748b;font-size:0.85rem;">No users yet.</div>';
+                    return;
+                }
+                const orgMap = {};
+                approved.forEach(u => {
+                    const key = u.organization_id || u.orgId || 'null';
+                    if (!orgMap[key]) orgMap[key] = [];
+                    orgMap[key].push(u);
+                });
+
+                const sortedOrgs = Object.keys(orgMap).sort((a,b) => {
+                    if (a==='null') return -1; if (b==='null') return 1;
+                    return (orgNames[a]||a).localeCompare(orgNames[b]||b);
+                });
+
+                let out = '';
+                sortedOrgs.forEach(orgId => {
+                    const orgUsers = orgMap[orgId];
+                    const orgLabel = (orgId==='null'||orgId==='—')
+                        ? '⚡ Platform / Super Admins'
+                        : (orgNames[orgId] || orgId);
+                    out += `
+                    <div style="margin-bottom:24px;">
+                        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #1e293b;">
+                            <span style="font-size:0.72rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#6366f1;">${orgLabel}</span>
+                            <span style="background:rgba(99,102,241,0.12);color:#818cf8;font-size:0.68rem;font-weight:700;padding:2px 8px;border-radius:20px;">${orgUsers.length} user${orgUsers.length!==1?'s':''}</span>
+                        </div>
+                        <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+                            <thead><tr style="color:#475569;text-align:left;border-bottom:1px solid #1e293b;font-size:0.72rem;">
+                                <th style="padding:6px 10px;">Email</th><th style="padding:6px 10px;">Role</th>
+                                <th style="padding:6px 10px;">Status</th><th style="padding:6px 10px;">Added</th><th style="padding:6px 10px;">Actions</th>
+                            </tr></thead>
+                            <tbody>${orgUsers
+                                .sort((a,b)=>({owner:0,admin:1,manager:2,cashier:3,viewer:4}[a.role]??5)-({owner:0,admin:1,manager:2,cashier:3,viewer:4}[b.role]??5))
+                                .map(u=>`<tr style="border-bottom:1px solid #0f172a;">
+                                <td style="padding:8px 10px;color:#e2e8f0;">${u.email}</td>
+                                <td style="padding:8px 10px;"><select onchange="mtSAUpdateRole('${u.id}',this.value)" style="padding:4px 8px;background:#1e293b;border:1px solid #334155;border-radius:5px;color:${roleColors[u.role]||'#94a3b8'};font-size:0.78rem;">${['owner','admin','manager','cashier','viewer'].map(r=>`<option value="${r}"${u.role===r?' selected':''}>${r}</option>`).join('')}</select></td>
+                                <td style="padding:8px 10px;"><span style="color:${statusColors[u.status]||'#94a3b8'};font-weight:600;font-size:0.78rem;">${(u.status||'').toUpperCase()}</span></td>
+                                <td style="padding:8px 10px;color:#64748b;font-size:0.78rem;">${u.created_at?new Date(u.created_at).toLocaleDateString('en-PH'):'-'}</td>
+                                <td style="padding:8px 10px;"><div style="display:flex;gap:5px;flex-wrap:wrap;">
+                                    ${u.status!=='approved'?`<button onclick="mtSAApproveUserDirect('${u.id}')" style="padding:4px 10px;background:rgba(16,185,129,0.1);border:1px solid #10b981;color:#34d399;border-radius:5px;cursor:pointer;font-size:0.73rem;">Approve</button>`:''}
+                                    ${u.status!=='suspended'?`<button onclick="mtSASuspendUser('${u.id}')" style="padding:4px 10px;background:rgba(239,68,68,0.08);border:1px solid #ef4444;color:#f87171;border-radius:5px;cursor:pointer;font-size:0.73rem;">Suspend</button>`:`<button onclick="mtSAUnsuspendUser('${u.id}')" style="padding:4px 10px;background:rgba(99,102,241,0.1);border:1px solid #6366f1;color:#818cf8;border-radius:5px;cursor:pointer;font-size:0.73rem;">Unsuspend</button>`}
+                                    <button onclick="mtSASendPasswordReset('${u.email}')" style="padding:4px 10px;background:rgba(251,191,36,0.08);border:1px solid #f59e0b;color:#fbbf24;border-radius:5px;cursor:pointer;font-size:0.73rem;">🔑 Reset PW</button>
+                                    <button onclick="mtSADeleteUserAccount('${u.id}','${u.email}')" style="padding:4px 10px;background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.4);color:#f87171;border-radius:5px;cursor:pointer;font-size:0.73rem;">🗑 Delete</button>
+                                </div></td>
+                            </tr>`).join('')}
+                            </tbody>
+                        </table>
+                    </div>`;
+                });
+                tableEl.innerHTML = out;
             }
         }
 
@@ -25967,18 +25980,18 @@ window.mtSAToggleOrgStatus=mtSAToggleOrgStatus;
             mtToast('⏳ Approving user...', 'info');
             const roleEl = document.getElementById('approve-role-'+docId);
             const role = roleEl ? roleEl.value : 'viewer';
-            try { await PRISM_SECURITY.approveUser(docId,role,null); mtToast('✅ Approved as '+role,'success'); mtSALoadAllowlist(); }
+            try { await PRISM_SECURITY.approveUser(docId,role,null); mtToast('✅ Approved as '+role,'success'); _invalidateAllowlistCache(); mtSALoadAllowlist(); }
             catch(e){ mtToast('Error: '+e.message,'error'); }
         }
         async function mtSAApproveUserDirect(docId) {
-            try { await PRISM_SECURITY.approveUser(docId,'viewer',null); mtToast('✅ User approved','success'); mtSALoadAllowlist(); }
+            try { await PRISM_SECURITY.approveUser(docId,'viewer',null); mtToast('✅ User approved','success'); _invalidateAllowlistCache(); mtSALoadAllowlist(); }
             catch(e){ mtToast('Error: '+e.message,'error'); }
         }
         async function mtSARejectUser(docId) {
             mtToast('⏳ Rejecting user...', 'info');
             const ok = await showConfirm('Remove this pending user?','warning','Remove User','Yes, Remove').catch(()=>window.confirm('Remove?'));
             if(!ok) return;
-            try { await window.db.collection(PRISM_SECURITY.COLLECTION).doc(docId).delete(); mtToast('🗑 Removed','success'); mtSALoadAllowlist(); }
+            try { await window.db.collection(PRISM_SECURITY.COLLECTION).doc(docId).delete(); mtToast('🗑 Removed','success'); _invalidateAllowlistCache(); mtSALoadAllowlist(); }
             catch(e){ mtToast('Error: '+e.message,'error'); }
         }
         async function mtSASuspendUser(docId) {
@@ -25988,7 +26001,7 @@ window.mtSAToggleOrgStatus=mtSAToggleOrgStatus;
         }
         async function mtSAUnsuspendUser(docId) {
             mtToast('⏳ Unsuspending user...', 'info');
-            try { await PRISM_SECURITY.approveUser(docId,null,null); mtToast('✅ Unsuspended','success'); mtSALoadAllowlist(); }
+            try { await PRISM_SECURITY.approveUser(docId,null,null); mtToast('✅ Unsuspended','success'); _invalidateAllowlistCache(); mtSALoadAllowlist(); }
             catch(e){ mtToast('Error: '+e.message,'error'); }
         }
         async function mtSAUpdateRole(docId,role) {
