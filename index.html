@@ -9758,6 +9758,7 @@ try{if(firebase.firestore&&firebase.firestore.persistentLocalCache){firestore.se
                         await unbindTenantFromProperty(property.id);
                     }
                     
+                    showToast('⏳ Saving property...', 'info');
                     await dbUpdate('properties', property);
                     showToast('Property updated successfully!', 'success');
                 } else {
@@ -9984,6 +9985,7 @@ try{if(firebase.firestore&&firebase.firestore.persistentLocalCache){firestore.se
 
             if (!await showConfirm('This will permanently delete this property. This action cannot be undone.', 'danger', '🗑️ Delete Property', 'Yes, Delete')) return;
 
+            showToast('⏳ Deleting property...', 'info');
             await dbDelete('properties', id);
             hideModal('expense-detail-modal');
             loadProperties();
@@ -10106,6 +10108,7 @@ try{if(firebase.firestore&&firebase.firestore.persistentLocalCache){firestore.se
                     existingTenant.status = 'active';
                     existingTenant.updatedAt = new Date().toISOString();
                     
+                    showToast('⏳ Saving tenant...', 'info');
                     await dbUpdate('tenants', existingTenant);
                 } else if (editId) {
                     // Editing existing tenant
@@ -10876,6 +10879,7 @@ async function recordTenantPayment(tenantId) {
             const payments = await dbGetAll('payments');
             for (const p of payments) {
                 if (p.tenantId === id) {
+                    showToast('⏳ Deleting tenant...', 'info');
                     await dbDelete('payments', p.id);
                 }
             }
@@ -12026,6 +12030,7 @@ async function loadWaterCustomers() {
             try {
                 if (editId) {
                     customer.id = parseInt(editId);
+                    showToast('⏳ Saving customer...', 'info');
                     await dbUpdate('waterCustomers', customer);
                     showToast('Customer updated successfully!', 'success');
                 } else {
@@ -12312,6 +12317,7 @@ async function loadWaterCustomers() {
             const sales = await dbGetAll('waterSales');
             for (const s of sales) {
                 if (s.customerId === id) {
+                    showToast('⏳ Deleting customer...', 'info');
                     await dbDelete('waterSales', s.id);
                 }
             }
@@ -12730,6 +12736,7 @@ async function loadWaterCustomers() {
             try {
                 if (editId) {
                     record.id = parseInt(editId);
+                    showToast('⏳ Saving time record...', 'info');
                     await dbUpdate('timeRecords', record);
                 } else {
                     await dbAdd('timeRecords', record);
@@ -13672,6 +13679,7 @@ async function showPayrollSummary() {
                 // Tag who recorded this
                 credit.recordedBy = currentAppUser?.username || 'unknown';
                 credit.recordedByRole = currentAppUser?.role || 'unknown';
+                showToast('⏳ Saving credit record...', 'info');
                 await dbAdd('credits', credit);
                 hideModal('credit-modal');
                 document.getElementById('credit-form').reset();
@@ -14394,6 +14402,7 @@ async function showPayrollSummary() {
             const creditPayments = await dbGetAll('creditPayments');
             for (const p of creditPayments) {
                 if (p.creditId === id) {
+                    showToast('⏳ Deleting credit record...', 'info');
                     await dbDelete('creditPayments', p.id);
                 }
             }
@@ -14627,6 +14636,7 @@ async function showPayrollSummary() {
                 if (editId) {
                     note.id = parseInt(editId);
                     note.updatedAt = new Date().toISOString();
+                    showToast('⏳ Saving note...', 'info');
                     await dbUpdate('customNotes', note);
                 } else {
                     await dbAdd('customNotes', note);
@@ -15349,6 +15359,7 @@ async function showPayrollSummary() {
                 // Tag who recorded this
                 expense.recordedBy = currentAppUser?.username || 'unknown';
                 expense.recordedByRole = currentAppUser?.role || 'unknown';
+                showToast('⏳ Saving expense...', 'info');
                 await dbAdd('expenses', expense);
                 
                 // Reset form and photo
@@ -15605,6 +15616,7 @@ async function showPayrollSummary() {
             }
             if (!await showConfirm('This expense record will be permanently removed. This action cannot be undone.', 'danger', '🗑️ Delete Expense', 'Yes, Delete')) return;
 
+            showToast('⏳ Deleting expense...', 'info');
             await dbDelete('expenses', id);
             hideModal('expense-detail-modal');
             loadExpenses();
@@ -16859,6 +16871,7 @@ async function showPayrollSummary() {
             const dateStr = new Date().toISOString().split('T')[0];
             const fileName = `PRISM-backup-${dateStr}.json`;
             
+            showToast('⏳ Preparing backup...', 'info');
             const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -17550,7 +17563,9 @@ async function showPayrollSummary() {
                 for (const table of tables) {
                     try {
                         const allRecords = await dbGetAll(table);
-                        const sampleRecords = allRecords.filter(r => r.isSample === true);
+                        showToast('⏳ Deleting sample data...', 'info');
+                        const sampleRecords = allRecords.filter(r => r.
+                        isSample === true);
                         for (const record of sampleRecords) {
                             await dbDelete(table, record.id);
                             totalDeleted++;
@@ -17580,6 +17595,8 @@ async function showPayrollSummary() {
             // Step 3 — type confirm
             const _ca3 = window.prompt('Type  DELETE ALL  to confirm (case sensitive):');
             if (_ca3 !== 'DELETE ALL') { showToast('❌ Cancelled — text did not match.', 'error'); return; }
+
+            showToast('⏳ Deleting all data...', 'info');
 
             try {
                 // Clear local IndexedDB
@@ -22567,6 +22584,7 @@ async function editTask(id) {
             try {
                 if (editId) {
                     task.id = parseInt(editId);
+                    showToast('⏳ Saving task...', 'info');
                     await dbUpdate('tasks', task);
                     try { showToast('✅ Task updated!', 'success'); } catch(e) {}
                 } else {
@@ -22590,6 +22608,7 @@ async function editTask(id) {
             if (!await showConfirm('This task will be permanently deleted.', 'danger', '🗑️ Delete Task', 'Yes, Delete')) return;
             
             try {
+                showToast('⏳ Deleting task...', 'info');
                 await dbDelete('tasks', id);
                 await loadTasks();
                 debouncedSync();
@@ -25731,13 +25750,13 @@ window.mtSAToggleOrgStatus=mtSAToggleOrgStatus;
                 'info', '🔑 Send Password Reset', 'Yes, Send Email'
             );
             if (!ok) return;
-            showToast('⏳ Sending password reset email...', 'info');
+            mtToast('⏳ Sending password reset email...', 'info');
             try {
                 const authInst = window.auth || (firebase && firebase.auth && firebase.auth());
                 await authInst.sendPasswordResetEmail(email);
-                showToast('✅ Password reset email sent to ' + email + ' — ask them to check their inbox!', 'success');
+                mtToast('✅ Password reset email sent to ' + email + ' — ask them to check their inbox!', 'success');
             } catch(e) {
-                showToast('❌ Failed: ' + (e.message || e), 'error');
+                mtToast('❌ Failed: ' + (e.message || e), 'error');
             }
         }
         window.mtSASendPasswordReset = mtSASendPasswordReset;
@@ -25755,14 +25774,15 @@ window.mtSAToggleOrgStatus=mtSAToggleOrgStatus;
                 'danger', '⚠️ Confirm Delete', 'Yes, Remove User'
             );
             if (!step2) return;
+            mtToast('⏳ Deleting user account entry...', 'info');
             try {
                 if (window.db) {
                     await window.db.collection('prism_allowed_users').doc(docId).delete();
                 }
-                showToast('✅ User account entry deleted. Re-add them anytime via Add User.', 'success');
+                mtToast('✅ User account entry deleted. Re-add them anytime via Add User.', 'success');
                 setTimeout(() => mtSALoadAllowlist(), 800);
             } catch(e) {
-                showToast('❌ Failed: ' + (e.message || e), 'error');
+                mtToast('❌ Failed: ' + (e.message || e), 'error');
             }
         }
         window.mtSADeleteUserAccount = mtSADeleteUserAccount;
@@ -25819,6 +25839,7 @@ window.mtSAToggleOrgStatus=mtSAToggleOrgStatus;
         }
 
         async function mtSAApproveUser(docId) {
+            mtToast('⏳ Approving user...', 'info');
             const roleEl = document.getElementById('approve-role-'+docId);
             const role = roleEl ? roleEl.value : 'viewer';
             try { await PRISM_SECURITY.approveUser(docId,role,null); mtToast('✅ Approved as '+role,'success'); mtSALoadAllowlist(); }
@@ -25829,16 +25850,19 @@ window.mtSAToggleOrgStatus=mtSAToggleOrgStatus;
             catch(e){ mtToast('Error: '+e.message,'error'); }
         }
         async function mtSARejectUser(docId) {
+            mtToast('⏳ Rejecting user...', 'info');
             const ok = await showConfirm('Remove this pending user?','warning','Remove User','Yes, Remove').catch(()=>window.confirm('Remove?'));
             if(!ok) return;
             try { await window.db.collection(PRISM_SECURITY.COLLECTION).doc(docId).delete(); mtToast('🗑 Removed','success'); mtSALoadAllowlist(); }
             catch(e){ mtToast('Error: '+e.message,'error'); }
         }
         async function mtSASuspendUser(docId) {
+            mtToast('⏳ Suspending user...', 'info');
             try { await PRISM_SECURITY.suspendUser(docId); mtToast('🔒 Suspended','success'); mtSALoadAllowlist(); }
             catch(e){ mtToast('Error: '+e.message,'error'); }
         }
         async function mtSAUnsuspendUser(docId) {
+            mtToast('⏳ Unsuspending user...', 'info');
             try { await PRISM_SECURITY.approveUser(docId,null,null); mtToast('✅ Unsuspended','success'); mtSALoadAllowlist(); }
             catch(e){ mtToast('Error: '+e.message,'error'); }
         }
@@ -25852,7 +25876,8 @@ window.mtSAToggleOrgStatus=mtSAToggleOrgStatus;
             const status = document.getElementById('sa-add-status')?.value||'approved';
             if(!email||!email.includes('@')){ mtToast('Enter a valid email','error'); return; }
             try {
-                const snap = await window.db.collection(PRISM_SECURITY.COLLECTION).where('email','==',email).get();
+                mtToast('⏳ Adding user to allowlist...', 'info');
+            const snap = await window.db.collection(PRISM_SECURITY.COLLECTION).where('email','==',email).get();
                 if(!snap.empty){ mtToast('⚠️ User already exists','warning'); return; }
                 await window.db.collection(PRISM_SECURITY.COLLECTION).add({
                     email, role, status, organization_id: null,
@@ -25879,10 +25904,10 @@ window.mtSAToggleOrgStatus=mtSAToggleOrgStatus;
         // ══ REQ6: OWNERSHIP TRANSFER ══
         async function prismTransferOwnership(newOwnerEmail) {
             if (!currentAppUser || !['admin','owner'].includes(currentAppUser.role)) {
-                showToast('❌ Only the current owner can transfer ownership.', 'error'); return;
+                mtToast('❌ Only the current owner can transfer ownership.', 'error'); return;
             }
             const org = MT.currentOrg;
-            if (!org) { showToast('❌ No active organization.', 'error'); return; }
+            if (!org) { mtToast('❌ No active organization.', 'error'); return; }
 
             const confirmed = await showConfirm(
                 `Transfer ownership of "${org.name}" to ${newOwnerEmail}?\n\nYou will become an Admin. This cannot be easily undone.`,
@@ -25893,7 +25918,7 @@ window.mtSAToggleOrgStatus=mtSAToggleOrgStatus;
             // Find new owner in users list
             const users = JSON.parse(localStorage.getItem('prism_app_users') || '[]');
             const newOwner = users.find(u => (u.email||'').toLowerCase() === newOwnerEmail.toLowerCase());
-            if (!newOwner) { showToast('❌ User not found in this organization.', 'error'); return; }
+            if (!newOwner) { mtToast('❌ User not found in this organization.', 'error'); return; }
 
             // Update org record
             const updatedOrg = { ...org, ownerEmail: newOwnerEmail, owner_uid: newOwner.id || newOwner.uid || '' };
@@ -25928,7 +25953,7 @@ window.mtSAToggleOrgStatus=mtSAToggleOrgStatus;
                 } catch(e) { console.warn('[Transfer] Firestore update failed:', e); }
             }
 
-            showToast(`✅ Ownership transferred to ${newOwnerEmail}. You are now an Admin.`, 'success');
+            mtToast(`✅ Ownership transferred to ${newOwnerEmail}. You are now an Admin.`, 'success');
             setTimeout(() => { if(typeof loadDashboard==='function') loadDashboard(); }, 800);
         }
         window.prismTransferOwnership = prismTransferOwnership;
@@ -25936,9 +25961,9 @@ window.mtSAToggleOrgStatus=mtSAToggleOrgStatus;
         // ── Transfer Ownership UI (called from Settings) ──
         function showTransferOwnershipModal() {
             const org = MT.currentOrg;
-            if (!org) { showToast('No active organization', 'error'); return; }
+            if (!org) { mtToast('No active organization', 'error'); return; }
             if (!currentAppUser || !['admin','owner'].includes(currentAppUser.role)) {
-                showToast('❌ Only Owner or Admin can transfer ownership.', 'error'); return;
+                mtToast('❌ Only Owner or Admin can transfer ownership.', 'error'); return;
             }
             const users = JSON.parse(localStorage.getItem('prism_app_users') || '[]');
             const others = users.filter(u => (u.email||'').toLowerCase() !== (currentAppUser.email||'').toLowerCase());
@@ -25963,7 +25988,7 @@ window.mtSAToggleOrgStatus=mtSAToggleOrgStatus;
                                </div>
                                <div style="display:flex;gap:10px;justify-content:flex-end;">
                                    <button onclick="document.getElementById('prism-transfer-modal').remove()" style="padding:10px 20px;background:rgba(255,255,255,0.06);border:1px solid #334155;color:#94a3b8;border-radius:8px;cursor:pointer;">Cancel</button>
-                                   <button onclick="const v=document.getElementById('transfer-new-owner').value;if(!v){showToast('Select a user','error');return;}prismTransferOwnership(v).then(()=>document.getElementById('prism-transfer-modal')?.remove())" style="padding:10px 20px;background:linear-gradient(135deg,#f59e0b,#ef4444);border:none;border-radius:8px;color:#fff;font-weight:700;cursor:pointer;">Transfer Ownership</button>
+                                   <button onclick="const v=document.getElementById('transfer-new-owner').value;if(!v){mtToast('Select a user','error');return;}prismTransferOwnership(v).then(()=>document.getElementById('prism-transfer-modal')?.remove())" style="padding:10px 20px;background:linear-gradient(135deg,#f59e0b,#ef4444);border:none;border-radius:8px;color:#fff;font-weight:700;cursor:pointer;">Transfer Ownership</button>
                                </div>`
                         }
                     </div>
