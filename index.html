@@ -11794,7 +11794,23 @@ async function recordTenantPayment(tenantId) {
                     </div>
 
                     <scr` + `ipt>window.onload = function() { window.print(); }<\/scr` + `ipt>
-                </body>
+                
+    <!-- Inline Type-Confirm (replaces window.prompt for DELETE ALL) -->
+    <div id="prism-type-confirm-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:9999999;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(3px);">
+        <div style="background:#1e293b;border:1px solid rgba(245,158,11,0.35);border-radius:16px;padding:28px 24px 22px;width:100%;max-width:370px;box-shadow:0 25px 60px rgba(0,0,0,0.6);animation:confirmSlideIn 0.18s ease;">
+            <div style="font-size:2rem;text-align:center;margin-bottom:10px;">⌨️</div>
+            <div style="font-size:1rem;font-weight:700;color:#fbbf24;text-align:center;margin-bottom:8px;">Final Confirmation</div>
+            <div style="font-size:0.85rem;color:#94a3b8;text-align:center;line-height:1.55;margin-bottom:18px;">Type <strong style="color:#f1f5f9;">DELETE ALL</strong> to confirm.<br>This cannot be undone.</div>
+            <input id="prism-type-confirm-input" type="text" autocomplete="off" placeholder="Type DELETE ALL here..."
+                style="width:100%;padding:11px 14px;background:#0f172a;border:1px solid #334155;border-radius:9px;color:#f1f5f9;font-size:0.95rem;margin-bottom:12px;outline:none;box-sizing:border-box;"
+                onfocus="this.style.borderColor='#f59e0b'" onblur="this.style.borderColor='#334155'"
+                onkeydown="if(event.key==='Enter')prismTypeConfirmSubmit()">
+            <button onclick="prismTypeConfirmSubmit()" style="width:100%;padding:11px;background:linear-gradient(135deg,#ef4444,#b91c1c);color:#fff;border:none;border-radius:9px;font-weight:700;font-size:0.9rem;cursor:pointer;margin-bottom:8px;">Execute Delete</button>
+            <button onclick="prismTypeConfirmCancel()" style="width:100%;padding:9px;background:rgba(255,255,255,0.05);color:#64748b;border:1px solid rgba(255,255,255,0.1);border-radius:9px;font-size:0.85rem;cursor:pointer;">Cancel</button>
+        </div>
+    </div>
+
+</body>
                 </html>
             `);
             printWindow.document.close();
@@ -17332,7 +17348,16 @@ async function showPayrollSummary() {
                 } catch (e) {}
                     }
                 } else {
-                    try { await dbClear('customNotes'); } catch (e) {}
+                    try {
+                    await dbClear('customNotes');
+                    // Restore reminders if user chose to keep them
+                    if (window._savedReminders && window._savedReminders.length > 0) {
+                        for (const r of window._savedReminders) {
+                            try { const x={...r}; delete x.id; await dbAdd('customNotes', x); } catch(e) {}
+                        }
+                        showToast(`🔔 ${window._savedReminders.length} reminder(s) restored`, 'success');
+                    }
+                } catch (e) {}
                 }
                 try { await dbClear('waterCustomers'); } catch (e) {}
                 try { await dbClear('waterSales'); } catch (e) {}
@@ -18033,8 +18058,8 @@ async function showPayrollSummary() {
                 );
                 if (_ca3t) window._savedTasks = [];
             }
-            // Step 3c — final type confirm
-            const _ca3 = window.prompt('Type  DELETE ALL  to confirm (case sensitive):');
+            // Step 3c — inline type confirm (no window.prompt)
+            const _ca3 = await prismShowTypeConfirm();
             if (_ca3 !== 'DELETE ALL') { showToast('❌ Cancelled — text did not match.', 'error'); return; }
 
             showToast('⏳ Deleting all data...', 'info');
@@ -18078,6 +18103,13 @@ async function showPayrollSummary() {
                     const _db = window.db || firestore;
                     const _orgId = (MT && MT.currentOrg && MT.currentOrg.id) || localStorage.getItem('mt_current_org_id') || (currentUser && currentUser.uid);
                     const userDocRef = _db.collection('prism_data').doc(_orgId);
+                    // Keep reminders/tasks in cloud if user chose to keep them
+                    const _cloudReminders = (window._savedReminders && window._savedReminders.length > 0)
+                        ? window._savedReminders.map(r => { const x={...r}; delete x.id; return x; })
+                        : [];
+                    const _cloudTasks = (window._savedTasks && window._savedTasks.length > 0)
+                        ? window._savedTasks.map(t => { const x={...t}; delete x.id; return x; })
+                        : [];
                     await userDocRef.set({
                         properties: [],
                         tenants: [],
@@ -18085,8 +18117,8 @@ async function showPayrollSummary() {
                         credits: [],
                         creditPayments: [],
                         expenses: [],
-                        customNotes: [],
-                        tasks: [],
+                        customNotes: _cloudReminders,
+                        tasks: _cloudTasks,
                         additionalIncome: [],
                         clientCharges: [],
                         waterCustomers: [],
@@ -18100,6 +18132,7 @@ async function showPayrollSummary() {
                     });
                     console.log('[Clear] Cloud data cleared successfully');
                     try { showToast('☁️ All data cleared from cloud', 'success'); } catch(e) {}
+                    window._savedReminders = null;
                 }
 
                 showToast('ℹ️ Action completed.', 'info');
@@ -27223,6 +27256,30 @@ window.addEventListener('DOMContentLoaded', () => {
         function mtStopRealtimeSync() {
             if (_realtimeSyncUnsubscribe) { _realtimeSyncUnsubscribe(); _realtimeSyncUnsubscribe = null; }
         }
-</script>
+
+        // ── Inline type-confirm (replaces window.prompt) ──
+        window._prismTypeConfirmResolve = null;
+        function prismShowTypeConfirm() {
+            return new Promise(resolve => {
+                window._prismTypeConfirmResolve = resolve;
+                const el = document.getElementById('prism-type-confirm-input');
+                if (el) el.value = '';
+                const ov = document.getElementById('prism-type-confirm-overlay');
+                if (ov) { ov.style.display = 'flex'; setTimeout(() => el && el.focus(), 150); }
+            });
+        }
+        function prismTypeConfirmSubmit() {
+            const val = (document.getElementById('prism-type-confirm-input') || {}).value || '';
+            const ov  = document.getElementById('prism-type-confirm-overlay');
+            if (ov) ov.style.display = 'none';
+            if (window._prismTypeConfirmResolve) { window._prismTypeConfirmResolve(val); window._prismTypeConfirmResolve = null; }
+        }
+        function prismTypeConfirmCancel() {
+            const ov = document.getElementById('prism-type-confirm-overlay');
+            if (ov) ov.style.display = 'none';
+            if (window._prismTypeConfirmResolve) { window._prismTypeConfirmResolve(null); window._prismTypeConfirmResolve = null; }
+        }
+
+        </script>
 </body>
 </html>
