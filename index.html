@@ -24334,6 +24334,30 @@ function _mtShowAppActual() {
     const app = document.querySelector('.prism-app-wrapper');
     if (app) app.classList.add('mt-active');
     mtUpdateOrgBadge();
+
+    // ── ROLE FIX: Ensure currentAppUser always reflects actual MT org role ──
+    // SA users bypass normal login so currentAppUser can be null or stale
+    const _mtActualRole = (MT && MT.currentOrgRole) || localStorage.getItem('mt_current_org_role') || null;
+    const _mtUser = MT && MT.currentUser;
+    if (_mtActualRole && _mtUser) {
+        if (!currentAppUser || ['viewer','cashier'].includes(currentAppUser.role)) {
+            // Only upgrade — never downgrade a legitimately set role
+            if (['owner','admin'].includes(_mtActualRole)) {
+                const _fixedUser = {
+                    id: currentAppUser ? currentAppUser.id : 1,
+                    username: currentAppUser ? currentAppUser.username : (_mtUser.email||'').split('@')[0],
+                    fullname: currentAppUser ? currentAppUser.fullname : (_mtUser.displayName || _mtUser.email),
+                    role: _mtActualRole,
+                    email: currentAppUser ? currentAppUser.email : (_mtUser.email||''),
+                    orgId: MT.currentOrg ? MT.currentOrg.id : '',
+                    permissions: { 'add-property':true,'edit-property':true,'delete-property':true,'add-tenant':true,'edit-tenant':true,'delete-tenant':true,'record-payment':true,'water-sales':true,'void-sale':true,'manage-staff':true,'manage-users':true,'view-reports':true,'backup-restore':true,'view-expenses':true,'view-income':true,'view-profiles':true,'delete-records':true,'access-settings':true,'access-hr':true,'access-properties':true }
+                };
+                currentAppUser = _fixedUser;
+                localStorage.setItem('carent_current_user', JSON.stringify(_fixedUser));
+                console.log('[PRISM] Role corrected to:', _mtActualRole, 'for', _mtUser.email);
+            }
+        }
+    }
     
     // Initialize PRISM app if not done yet
     if (!_prismAppInitialized) {
@@ -27212,7 +27236,13 @@ window.mtSAToggleOrgStatus=mtSAToggleOrgStatus;
             const _origSyncToFirebase = typeof window.syncToFirebase === 'function' ? window.syncToFirebase : null;
             if (_origSyncToFirebase && !_origSyncToFirebase._req7guarded) {
                 window.syncToFirebase = async function(...args) {
-                    const _role = currentAppUser?.role || 'viewer';
+                    // Always allow sync during wipe/delete operations
+                    // Also allow if MT org role is owner/admin (SA users may have stale currentAppUser)
+                    if (window._prismWipeInProgress) return _origSyncToFirebase(...args);
+                    const _mtRole = (typeof MT !== 'undefined' && MT.currentOrgRole) || null;
+                    // SA/Owner via MT always allowed regardless of currentAppUser
+                    if (_mtRole && ['owner','admin'].includes(_mtRole)) return _origSyncToFirebase(...args);
+                    const _role = currentAppUser?.role || _mtRole || 'viewer';
                     if (['viewer','cashier'].includes(_role)) {
                         console.info('[Security REQ7] Sync blocked for role:', _role);
                         return;
