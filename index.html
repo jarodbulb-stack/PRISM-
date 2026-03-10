@@ -11826,7 +11826,7 @@ async function recordTenantPayment(tenantId) {
         <div style="background:#1e293b;border:1px solid rgba(245,158,11,0.35);border-radius:16px;padding:28px 24px 22px;width:100%;max-width:370px;box-shadow:0 25px 60px rgba(0,0,0,0.6);animation:confirmSlideIn 0.18s ease;">
             <div style="font-size:2rem;text-align:center;margin-bottom:10px;">⌨️</div>
             <div style="font-size:1rem;font-weight:700;color:#fbbf24;text-align:center;margin-bottom:8px;">Final Confirmation</div>
-            <div style="font-size:0.85rem;color:#94a3b8;text-align:center;line-height:1.55;margin-bottom:18px;">Type <strong style="color:#f1f5f9;">DELETE ALL</strong> to confirm.<br>This cannot be undone.</div>
+            <div id="prism-type-confirm-msg" style="font-size:0.85rem;color:#94a3b8;text-align:center;line-height:1.55;margin-bottom:18px;">Type <strong style="color:#f1f5f9;">DELETE ALL</strong> to confirm.<br>This cannot be undone.</div>
             <input id="prism-type-confirm-input" type="text" autocomplete="off" placeholder="Type DELETE ALL here..."
                 style="width:100%;padding:11px 14px;background:#0f172a;border:1px solid #334155;border-radius:9px;color:#f1f5f9;font-size:0.95rem;margin-bottom:12px;outline:none;box-sizing:border-box;"
                 onfocus="this.style.borderColor='#f59e0b'" onblur="this.style.borderColor='#334155'"
@@ -23486,7 +23486,8 @@ async function editTask(id) {
                             bonus: d === 1 ? 50 : 0,
                             notes: '',
                             paid: false,
-                            createdAt: new Date().toISOString()
+                            createdAt: new Date().toISOString(),
+                            isSample: true
                         };
                         await dbAdd('timeRecords', record);
                     }
@@ -27465,11 +27466,17 @@ window.addEventListener('DOMContentLoaded', () => {
 
         // ── Inline type-confirm (replaces window.prompt) ──
         window._prismTypeConfirmResolve = null;
-        function prismShowTypeConfirm() {
+        function prismShowTypeConfirm(phrase) {
+            // phrase defaults to 'DELETE ALL' if not provided
+            const confirmPhrase = phrase || 'DELETE ALL';
             return new Promise(resolve => {
                 window._prismTypeConfirmResolve = resolve;
+                window._prismTypeConfirmPhrase = confirmPhrase;
                 const el = document.getElementById('prism-type-confirm-input');
-                if (el) el.value = '';
+                if (el) { el.value = ''; el.placeholder = 'Type ' + confirmPhrase + ' here...'; }
+                // Update the instruction text dynamically
+                const msgEl = document.getElementById('prism-type-confirm-msg');
+                if (msgEl) msgEl.innerHTML = 'Type <strong style="color:#f1f5f9;">' + confirmPhrase + '</strong> to confirm.<br>This cannot be undone.';
                 const ov = document.getElementById('prism-type-confirm-overlay');
                 if (ov) { ov.style.display = 'flex'; setTimeout(() => el && el.focus(), 150); }
             });
