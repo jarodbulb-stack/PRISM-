@@ -18172,131 +18172,99 @@ async function showPayrollSummary() {
         window.deleteSampleData = deleteSampleData;
 
         async function clearAllData() {
-            // Step 0 — silently save reminders + tasks before clearing (ask user later)
-            try {
-                const _allNotes = await dbGetAll('customNotes');
-                window._savedReminders = (_allNotes||[]).filter(n => n.category === 'reminder');
-            } catch(e) { window._savedReminders = []; }
-            try {
-                window._savedTasks = await dbGetAll('tasks') || [];
-            } catch(e) { window._savedTasks = []; }
+            // ── Step 0: Snapshot notes + tasks before asking ──
+            let _snapNotes = [], _snapTasks = [];
+            try { _snapNotes = await dbGetAll('customNotes') || []; } catch(e) {}
+            try { _snapTasks = await dbGetAll('tasks') || [];        } catch(e) {}
 
-            // Step 1
-            const _ca1 = await showConfirm('ALL data will be permanently deleted — properties, tenants, payments, credits, expenses, notes, water records, and employees.\n\nThis CANNOT be undone.', 'danger', '☢️ Delete ALL Data', 'Yes, continue');
+            // ── Step 1 ──
+            const _ca1 = await showConfirm('ALL data will be permanently deleted — properties, tenants, payments, credits, expenses, water records, employees, notes and tasks.\n\nThis CANNOT be undone.', 'danger', '\u2622\ufe0f Delete ALL Data', 'Yes, continue');
             if (!_ca1) return;
-            // Step 2
-            const _ca2 = await showConfirm('This is your FINAL warning.\n\nEvery single record — real and sample — will be gone forever. Are you absolutely sure?', 'danger', '☢️ Point of No Return', 'I understand, proceed');
-            if (!_ca2) return;
-            // Step 3a — ask about reminders
-            if (window._savedReminders && window._savedReminders.length > 0) {
-                const _ca3r = await showConfirm(
-                    `🔔 You have ${window._savedReminders.length} personal reminder(s) (SSS, bills, etc.)\n\nDo you want to DELETE them too, or KEEP them?`,
-                    'danger', '🔔 Your Personal Reminders', 'Yes, delete them too'
-                );
-                if (_ca3r) window._savedReminders = [];
-            }
-            // Step 3b — ask about tasks
-            if (window._savedTasks && window._savedTasks.length > 0) {
-                const _ca3t = await showConfirm(
-                    `✅ You have ${window._savedTasks.length} task(s) on your list.\n\nDo you want to DELETE them too, or KEEP them?`,
-                    'danger', '✅ Your Tasks', 'Yes, delete them too'
-                );
-                if (_ca3t) window._savedTasks = [];
-            }
-            // Step 3c — inline type confirm (no window.prompt)
-            const _ca3 = await prismShowTypeConfirm();
-            if (_ca3 !== 'DELETE ALL') { showToast('❌ Cancelled — text did not match.', 'error'); return; }
 
-            showToast('⏳ Deleting all data...', 'info');
+            // ── Step 2 ──
+            const _ca2 = await showConfirm('This is your FINAL warning.\n\nEvery single record will be gone forever. Are you absolutely sure?', 'danger', '\u2622\ufe0f Point of No Return', 'I understand, proceed');
+            if (!_ca2) return;
+
+            // ── Step 3: Ask about notes (all categories — reminders, client, area, general) ──
+            let _keepNotes = [];
+            if (_snapNotes.length > 0) {
+                const keepN = await showConfirm('You have ' + _snapNotes.length + ' note(s) and reminder(s).\n\nDelete them all too, or keep them all?\n\n(To delete specific notes manually, cancel here.)', 'warning', '\ud83d\udcdd Notes & Reminders', 'Delete them all', 'Keep them all');
+                _keepNotes = keepN ? [] : _snapNotes;
+            }
+
+            // ── Step 4: Ask about tasks ──
+            let _keepTasks = [];
+            if (_snapTasks.length > 0) {
+                const keepT = await showConfirm('You have ' + _snapTasks.length + ' task(s).\n\nDelete them all too, or keep them all?\n\n(To delete specific tasks manually, cancel here.)', 'warning', '\u2705 Tasks', 'Delete them all', 'Keep them all');
+                _keepTasks = keepT ? [] : _snapTasks;
+            }
+
+            // ── Step 5: Type confirm ──
+            const _ca5 = await prismShowTypeConfirm();
+            if (_ca5 !== 'DELETE ALL') { showToast('\u274c Cancelled \u2014 text did not match.', 'error'); return; }
+
+            showToast('\u23f3 Deleting all data...', 'info');
 
             try {
-                // Clear local IndexedDB
+                // ── Wipe all business stores ──
                 await dbClear('properties');
                 await dbClear('tenants');
                 await dbClear('payments');
                 await dbClear('credits');
                 await dbClear('creditPayments');
                 await dbClear('expenses');
-                try { await dbClear('customNotes'); } catch (e) {}
-                try { await dbClear('additionalIncome'); } catch (e) {}
-                try { await dbClear('clientCharges'); } catch (e) {}
-                try { await dbClear('waterCustomers'); } catch (e) {}
-                try { await dbClear('waterSales'); } catch (e) {}
-                try { await dbClear('employees'); } catch (e) {}
-                try { await dbClear('cashAdvances'); } catch (e) {}
-                try { await dbClear('salaryPayments'); } catch (e) {}
-                try { await dbClear('timeRecords'); } catch (e) {}
+                try { await dbClear('additionalIncome'); } catch(e) {}
+                try { await dbClear('clientCharges'); }    catch(e) {}
+                try { await dbClear('waterCustomers'); }   catch(e) {}
+                try { await dbClear('waterSales'); }       catch(e) {}
+                try { await dbClear('employees'); }        catch(e) {}
+                try { await dbClear('cashAdvances'); }     catch(e) {}
+                try { await dbClear('salaryPayments'); }   catch(e) {}
+                try { await dbClear('timeRecords'); }      catch(e) {}
+
+                // ── Notes: wipe then restore if kept ──
+                try {
+                    await dbClear('customNotes');
+                    for (const n of _keepNotes) {
+                        try { const x = Object.assign({}, n); delete x.id; await dbAdd('customNotes', x); } catch(e) {}
+                    }
+                    if (_keepNotes.length > 0) showToast(_keepNotes.length + ' note(s) kept', 'success');
+                } catch(e) {}
+
+                // ── Tasks: wipe then restore if kept ──
                 try {
                     await dbClear('tasks');
-                    // Restore tasks if user chose to keep them
-                    if (window._savedTasks && window._savedTasks.length > 0) {
-                        for (const t of window._savedTasks) {
-                            try {
-                                const restored = {...t};
-                                delete restored.id;
-                                await dbAdd('tasks', restored);
-                            } catch(e) {}
-                        }
-                        showToast(`✅ ${window._savedTasks.length} task(s) restored`, 'success');
-                        window._savedTasks = null;
+                    for (const t of _keepTasks) {
+                        try { const x = Object.assign({}, t); delete x.id; await dbAdd('tasks', x); } catch(e) {}
                     }
-                } catch (e) {}
+                    if (_keepTasks.length > 0) showToast(_keepTasks.length + ' task(s) kept', 'success');
+                } catch(e) {}
 
-                // Clear Firebase cloud data (so it doesn't come back)
+                // ── Firebase: push clean slate (with kept items so sync never overwrites) ──
                 if (firebaseReady && (window.db || firestore) && (currentUser || MT.currentUser)) {
-                    console.log('[Clear] Deleting cloud data...');
-                    const _db = window.db || firestore;
+                    const _fdb = window.db || firestore;
                     const _orgId = (MT && MT.currentOrg && MT.currentOrg.id) || localStorage.getItem('mt_current_org_id') || (currentUser && currentUser.uid);
-                    const userDocRef = _db.collection('prism_data').doc(_orgId);
-                    // Keep reminders/tasks in cloud if user chose to keep them
-                    const _cloudReminders = (window._savedReminders && window._savedReminders.length > 0)
-                        ? window._savedReminders.map(r => { const x={...r}; delete x.id; return x; })
-                        : [];
-                    const _cloudTasks = (window._savedTasks && window._savedTasks.length > 0)
-                        ? window._savedTasks.map(t => { const x={...t}; delete x.id; return x; })
-                        : [];
-                    await userDocRef.set({
-                        properties: [],
-                        tenants: [],
-                        payments: [],
-                        credits: [],
-                        creditPayments: [],
-                        expenses: [],
-                        customNotes: _cloudReminders,
-                        tasks: _cloudTasks,
-                        additionalIncome: [],
-                        clientCharges: [],
-                        waterCustomers: [],
-                        waterSales: [],
-                        employees: [],
-                        cashAdvances: [],
-                        salaryPayments: [],
-                        timeRecords: [],
+                    await _fdb.collection('prism_data').doc(_orgId).set({
+                        properties: [], tenants: [], payments: [], credits: [],
+                        creditPayments: [], expenses: [], additionalIncome: [],
+                        clientCharges: [], waterCustomers: [], waterSales: [],
+                        employees: [], cashAdvances: [], salaryPayments: [], timeRecords: [],
+                        customNotes: _keepNotes.map(function(n){ var x=Object.assign({},n); delete x.id; return x; }),
+                        tasks:       _keepTasks.map(function(t){ var x=Object.assign({},t); delete x.id; return x; }),
                         lastSync: new Date().toISOString(),
                         clearedAt: new Date().toISOString()
                     });
-                    console.log('[Clear] Cloud data cleared successfully');
-                    try { showToast('☁️ All data cleared from cloud', 'success'); } catch(e) {}
-                    window._savedReminders = null;
+                    try { showToast('\u2601\ufe0f Cloud data cleared', 'success'); } catch(e) {}
                 }
 
-                showToast('ℹ️ Action completed.', 'info');
-                
-                // Refresh UI
-                loadDashboard();
-                loadProperties();
-                loadTenants();
-                loadCredits();
-                loadWaterCustomers();
-                loadEmployees();
-                loadExpenses();
-                loadNotes();
-                refreshStats();
-                updateDeleteStats();
-                
+                showToast('\u2705 All done.', 'success');
+                loadDashboard(); loadProperties(); loadTenants(); loadCredits();
+                loadWaterCustomers(); loadEmployees(); loadExpenses();
+                loadNotes(); refreshStats(); updateDeleteStats();
+
             } catch (error) {
-                console.error('[Clear] Error clearing data:', error);
-                showToast('❌ Error clearing data: ' + error.message, 'error');
+                console.error('[Clear] Error:', error);
+                showToast('\u274c Error clearing data: ' + error.message, 'error');
             }
         }
 
