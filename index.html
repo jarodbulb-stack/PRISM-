@@ -18125,26 +18125,8 @@ async function showPayrollSummary() {
 
         // ══ DELETE SAMPLE DATA ONLY ══
         async function deleteSampleData() {
-            // Step 1 — Initial confirm (BEFORE setting wipe flag)
-            const step1 = await showConfirm(
-                'This will permanently delete all sample/demo data across every module — properties, tenants, payments, credits, employees, water, tasks, notes and more.\n\nYour REAL recorded data will NOT be affected.',
-                'warning', '🧹 Delete Sample Data', 'Yes, continue'
-            );
-            if (!step1) return;
-
-            // Step 2 — Second confirm
-            const step2 = await showConfirm(
-                'Are you absolutely sure? This action cannot be undone.\n\nOnly records tagged as sample data will be removed.',
-                'danger', '⚠️ Final Warning', 'Yes, delete sample data'
-            );
-            if (!step2) return;
-
-            // Step 3 — Inline type confirmation
-            const typed = await prismShowTypeConfirm('DELETE SAMPLE');
-            if (typed !== 'DELETE SAMPLE') {
-                showToast('❌ Cancelled — text did not match.', 'error');
-                return;
-            }
+            // Single native confirm — avoids custom dialog race conditions
+            if (!confirm('Delete all sample/demo data?\n\nThis will remove all records tagged as sample data. Your real data will NOT be affected.')) return;
 
             // ── All confirms passed ──
             // Step 1: Kill the listener permanently — do NOT restart until reload
@@ -18279,33 +18261,12 @@ async function clearAllData() {
             try { _snapNotes = await dbGetAll('customNotes') || []; } catch(e) {}
             try { _snapTasks = await dbGetAll('tasks') || [];        } catch(e) {}
 
-            // ── Step 1 ──
-            const _ca1 = await showConfirm('ALL data will be permanently deleted — properties, tenants, payments, credits, expenses, water records, employees, notes and tasks.\n\nThis CANNOT be undone.', 'danger', '\u2622\ufe0f Delete ALL Data', 'Yes, continue');
-            if (!_ca1) return;
+            // ── Single native confirm ──
+            if (!confirm('DELETE ALL DATA?\n\nThis will permanently delete ALL records. This cannot be undone.')) return;
+            const _keepNotes = [];
+            const _keepTasks = [];
 
-            // ── Step 2 ──
-            const _ca2 = await showConfirm('This is your FINAL warning.\n\nEvery single record will be gone forever. Are you absolutely sure?', 'danger', '\u2622\ufe0f Point of No Return', 'I understand, proceed');
-            if (!_ca2) return;
-
-            // ── Step 3: Ask about notes (all categories — reminders, client, area, general) ──
-            let _keepNotes = [];
-            if (_snapNotes.length > 0) {
-                const keepN = await showConfirm('You have ' + _snapNotes.length + ' note(s) and reminder(s).\n\nDelete them all too, or keep them all?\n\n(To delete specific notes manually, cancel here.)', 'warning', '\ud83d\udcdd Notes & Reminders', 'Delete them all', 'Keep them all');
-                _keepNotes = keepN ? [] : _snapNotes;
-            }
-
-            // ── Step 4: Ask about tasks ──
-            let _keepTasks = [];
-            if (_snapTasks.length > 0) {
-                const keepT = await showConfirm('You have ' + _snapTasks.length + ' task(s).\n\nDelete them all too, or keep them all?\n\n(To delete specific tasks manually, cancel here.)', 'warning', '\u2705 Tasks', 'Delete them all', 'Keep them all');
-                _keepTasks = keepT ? [] : _snapTasks;
-            }
-
-            // ── Step 5: Type confirm ──
-            const _ca5 = await prismShowTypeConfirm();
-            if (_ca5 !== 'DELETE ALL') { showToast('\u274c Cancelled \u2014 text did not match.', 'error'); return; }
-
-            // ── All confirms passed — NOW lock out Firebase sync ──
+            // ── Lock out Firebase sync ──
             window._prismWipeInProgress = true;
             try { if (typeof mtStopRealtimeSync === 'function') mtStopRealtimeSync(); } catch(e) {}
 
