@@ -8663,7 +8663,7 @@ try{if(firebase.firestore&&firebase.firestore.persistentLocalCache){firestore.se
         };
         window.PrismGuardian = PrismGuardian;
         window.requestVoidAttendance = requestVoidAttendance;
-        window.mtDemoLogin = mtDemoLogin;
+        // window.mtDemoLogin exposed below after definition
         window.requestVoidAdvance = requestVoidAdvance;
         window.getNextDueDate = getNextDueDate;
          // expose globally for onclick handlers
@@ -19573,7 +19573,7 @@ Lender/Manager
             const dayOfMonth = now.getDate();
             
             switch(type) {
-                case 'properties':
+                case 'properties': {
                     titleText = '🏠 All Properties';
                     sectionName = 'properties';
                     // Use same logic as dashboard: occupied = has active tenant
@@ -19629,8 +19629,9 @@ Lender/Manager
                             `).join('')}
                     `;
                     break;
+            }
                     
-                case 'vacant':
+                case 'vacant': {
                     titleText = '🏠 Vacant Properties';
                     sectionName = 'properties';
                     // Match dashboard: vacant = no active tenant
@@ -19659,9 +19660,10 @@ Lender/Manager
                                 </div>
                             `).join('')}
                     `;
+            }
                     break;
                     
-                case 'tenants':
+                case 'tenants': {
                     titleText = '👥 All Tenants';
                     sectionName = 'tenants';
                     // Dashboard shows ALL tenants (tenants.length)
@@ -19711,9 +19713,10 @@ Lender/Manager
                             `).join('')}
                         ` : ''}
                     `;
+            }
                     break;
                     
-                case 'debtors':
+                case 'debtors': {
                     titleText = '💰 Debtors / Credits';
                     sectionName = 'credits';
                     // Dashboard shows ALL credits (credits.length), so show all with balance info
@@ -19771,9 +19774,10 @@ Lender/Manager
                             `).join('')}
                         ` : ''}
                     `;
+            }
                     break;
                     
-                case 'due-soon':
+                case 'due-soon': {
                     titleText = '📅 Due Soon';
                     sectionName = 'tenants';
                     // Match dashboard logic exactly: days 1-5 = due soon (before 5th of month)
@@ -19837,9 +19841,10 @@ Lender/Manager
                                 </div>
                             `).join('')}
                     `;
+            }
                     break;
                     
-                case 'overdue':
+                case 'overdue': {
                     titleText = '⚠️ Overdue Payments';
                     sectionName = 'tenants';
                     // Match dashboard exactly: tenants past day 5, debtors with 30+ days no payment
@@ -19903,9 +19908,10 @@ Lender/Manager
                                 </div>
                             `).join('')}
                     `;
+            }
                     break;
                     
-                case 'rent-collected':
+                case 'rent-collected': {
                     titleText = '✅ Rent Collected This Month';
                     sectionName = 'tenants';
                     // Match dashboard: payments filtered by date.startsWith(currentMonth) where type=rent
@@ -19935,9 +19941,10 @@ Lender/Manager
                                 `;
                             }).join('')}
                     `;
+            }
                     break;
                     
-                case 'credit-repaid':
+                case 'credit-repaid': {
                     titleText = '💳 Credit Repaid This Month';
                     sectionName = 'credits';
                     // Match dashboard: creditPayments filtered by date.startsWith(currentMonth)
@@ -19966,9 +19973,10 @@ Lender/Manager
                                 `;
                             }).join('')}
                     `;
+            }
                     break;
                     
-                case 'other-income':
+                case 'other-income': {
                     titleText = '💵 Other Income This Month';
                     sectionName = 'income';
                     // Match dashboard: additionalIncome filtered by date.startsWith(currentMonth)
@@ -19994,9 +20002,10 @@ Lender/Manager
                                 </div>
                             `).join('')}
                     `;
+            }
                     break;
                     
-                case 'total-income':
+                case 'total-income': {
                     titleText = '📊 Total Income This Month';
                     sectionName = 'dashboard';
                     // Match dashboard exactly: collected + creditRepaid + otherIncomeThisMonth
@@ -20041,9 +20050,10 @@ Lender/Manager
                         }).join('')}
                         ` : ''}
                     `;
+            }
                     break;
                     
-                case 'expected-rent':
+                case 'expected-rent': {
                     titleText = '📋 Expected Rent This Month';
                     sectionName = 'tenants';
                     // Match dashboard: all active tenants sum
@@ -20085,9 +20095,10 @@ Lender/Manager
                             `;
                         }).join('')}
                     `;
+            }
                     break;
                     
-                case 'outstanding-credit':
+                case 'outstanding-credit': {
                     titleText = '💰 Outstanding Credit';
                     sectionName = 'credits';
                     // Match dashboard: overallCreditDue - overallCreditCollected
@@ -20127,9 +20138,10 @@ Lender/Manager
                                 </div>
                             `).join('')}
                     `;
+            }
                     break;
                     
-                case 'pending-charges':
+                case 'pending-charges': {
                     titleText = '⏳ Pending Charges';
                     sectionName = 'tenants';
                     // Match dashboard: clientCharges with status === 'pending'
@@ -20157,9 +20169,10 @@ Lender/Manager
                                 `;
                             }).join('')}
                     `;
+            }
                     break;
                     
-                case 'total-receivables':
+                case 'total-receivables': {
                     titleText = '💰 Total Receivables';
                     sectionName = 'dashboard';
                     // Match dashboard exactly: outstandingRent + outstandingCredit + pendingCharges
@@ -20217,9 +20230,10 @@ Lender/Manager
                             </div>
                         </div>
                     `;
+            }
                     break;
                     
-                case 'tasks':
+                case 'tasks': {
                     titleText = '✅ Pending Tasks';
                     sectionName = 'tasks';
                     const allTasks = await dbGetAll('tasks');
@@ -20246,9 +20260,10 @@ Lender/Manager
                             <span class="badge ${t.priority==='high'?'badge-danger':t.priority==='medium'?'badge-warning':'badge-success'}">${t.priority||'normal'}</span>
                         </div>`).join('')}
                     `;
+            }
                     break;
 
-                case 'notes':
+                case 'notes': {
                     titleText = '📝 Notes & Reminders';
                     sectionName = 'notes';
                     const allNotes = await dbGetAll('customNotes');
@@ -20271,9 +20286,10 @@ Lender/Manager
                             <span class="badge badge-info">${n.category||'general'}</span>
                         </div>`).join('')}
                     `;
+            }
                     break;
 
-                case 'income':
+                case 'income': {
                     titleText = '💰 Additional Income';
                     sectionName = 'income';
                     const incList = await dbGetAll('additionalIncome');
@@ -20293,10 +20309,12 @@ Lender/Manager
                             <span style="font-weight:700;color:#10b981;">₱${(i.amount||0).toLocaleString()}</span>
                         </div>`).join('')}
                     `;
-                    break;
 
-                default:
-                    html = '<p>No data available</p>';
+                    break;
+            }
+            default: {
+                html = '<p>No data available</p>';
+            }
             }
             
             title.textContent = titleText;
@@ -25354,6 +25372,7 @@ function mtDemoLogin() {
         if (typeof loadDashboard === 'function') loadDashboard();
     }, 300);
 }
+        window.mtDemoLogin = mtDemoLogin;
 
 // ---- Org Setup Wizard ----
 function mtSelectBizType(type, el) {
