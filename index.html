@@ -7751,7 +7751,6 @@ try{if(firebase.firestore&&firebase.firestore.persistentLocalCache){firestore.se
 
                 const dataRef = dbRef.collection('prism_data').doc(orgId);
                 const doc = await dataRef.get();
-                // DEBUG: show what was found
                 console.log('[Sync] Doc exists:', doc.exists, doc.exists ? 'appUsers:' + (doc.data().appUsers||[]).length : '');
 
                 if (doc.exists) {
@@ -18201,7 +18200,10 @@ async function showPayrollSummary() {
                 // Step 8: Keep wipe flag TRUE — do NOT restart listener
                 // The listener will restart naturally on next page load with fresh timestamp
                 // This prevents any race condition from onSnapshot restoring old data
-                console.log('[DeleteSample] Complete. Listener stays off until reload.');
+                // Reset wipe flag after UI is refreshed — safe now since Firebase is already updated
+                window._prismWipeInProgress = false;
+                try { if (typeof mtStartRealtimeSync === 'function') mtStartRealtimeSync(); } catch(e) {}
+                console.log('[DeleteSample] Complete. Sync resumed.');
 
             } catch(e) {
                 window._prismWipeInProgress = false;
@@ -18331,9 +18333,10 @@ async function clearAllData() {
                 // Wait 3s for Firebase to fully propagate before refreshing UI
                 await new Promise(r => setTimeout(r, 3000));
                 await prismFullRefresh();
-                // ── Do NOT restart listener — keep wipe flag TRUE until next page load ──
-                // This prevents onSnapshot from restoring old data in the propagation window
-                console.log('[ClearAll] Complete. Listener stays off until reload.');
+                // Reset wipe flag and resume sync — Firebase is already updated with clean data
+                window._prismWipeInProgress = false;
+                try { if (typeof mtStartRealtimeSync === 'function') mtStartRealtimeSync(); } catch(e) {}
+                console.log('[ClearAll] Complete. Sync resumed.');
 
             } catch (error) {
                 window._prismWipeInProgress = false;
