@@ -10702,6 +10702,15 @@ try{if(firebase.firestore&&firebase.firestore.persistentLocalCache){firestore.se
             
             document.getElementById('tenant-detail-content').innerHTML = `
                 ${renderClientIdCard('tenant', tenant, { propertyName: property ? property.name : 'Unknown' })}
+${tenant.status === 'inactive' ? `
+<div style="background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.3);border-radius:10px;padding:12px 16px;margin-bottom:12px;display:flex;align-items:center;gap:10px;">
+    <span style="font-size:1.2rem;">🚫</span>
+    <div>
+        <div style="font-weight:700;color:#f87171;font-size:0.9rem;">TENANT TERMINATED / INACTIVE</div>
+        <div style="font-size:0.78rem;color:#94a3b8;">Reason: ${tenant.terminationReason || 'Not specified'} &middot; Date: ${tenant.terminatedAt ? new Date(tenant.terminatedAt).toLocaleDateString('en-PH') : '-'}</div>
+        ${tenant.terminationNotes ? `<div style="font-size:0.78rem;color:#64748b;margin-top:2px;">${tenant.terminationNotes}</div>` : ''}
+    </div>
+</div>` : ''}
 
                 ${currentAppUser && (currentAppUser.role === 'admin' || currentAppUser.role === 'owner' || currentAppUser.role === 'manager') ? `
                 <button class="admin-edit-profile-btn" onclick="editTenant(${id})">
@@ -10796,6 +10805,7 @@ try{if(firebase.firestore&&firebase.firestore.persistentLocalCache){firestore.se
                     ${currentAppUser && currentAppUser.role !== 'cashier' ? `
                         <button class="btn btn-warning" onclick="addChargeToClient('tenant', ${id})">💵 Add Charge</button>
                         <button class="btn btn-danger" onclick="deleteTenant(${id})">Delete</button>
+                        ${_isAdminRole ? `<button class="btn" style="background:${tenant.status==='inactive'?'rgba(16,185,129,0.12)':'rgba(239,68,68,0.12)'};border:1px solid ${tenant.status==='inactive'?'#10b981':'#ef4444'};color:${tenant.status==='inactive'?'#10b981':'#f87171'};padding:8px 16px;border-radius:8px;font-weight:600;cursor:pointer;" onclick="terminateTenant(${id})">${tenant.status==='inactive'?'✅ Reactivate Tenant':'🚫 Terminate Tenant'}</button>` : ''}
                     ` : `
                         <button class="btn btn-primary" onclick="quickEndorse('sales', '🏠 Rent payment recorded for tenant. Admin please review.')">📋 Endorse to Admin</button>
                     `}
@@ -11120,6 +11130,182 @@ async function recordTenantPayment(tenantId) {
             loadDashboard();
             debouncedSync();
         }
+
+        // ── TERMINATE / REACTIVATE TENANT ──────────────────────────────────
+        async function terminateTenant(id) {
+            const tenant = await dbGet('tenants', id);
+            if (!tenant) return;
+
+            const isInactive = tenant.status === 'inactive';
+
+            if (isInactive) {
+                // Reactivate
+                if (!confirm('Reactivate this tenant?\n\n' + tenant.name + '\n\nThis will mark them as active again.')) return;
+                tenant.status = 'active';
+                tenant.terminatedAt = null;
+                tenant.terminationReason = null;
+                await dbUpdate('tenants', tenant);
+                // Mark property occupied
+                if (tenant.propertyId) {
+                    const prop = await dbGet('properties', tenant.propertyId);
+                    if (prop) { prop.status = 'occupied'; await dbUpdate('properties', prop); }
+                }
+                showToast('✅ Tenant reactivated.', 'success');
+                hideModal('tenant-detail-modal');
+                await loadTenants(); await loadProperties(); await loadDashboard();
+                return;
+            }
+
+            // Terminate — show reason modal
+            const existing = document.getElementById('prism-terminate-modal');
+            if (existing) existing.remove();
+            const modal = document.createElement('div');
+            modal.id = 'prism-terminate-modal';
+            modal.style.cssText = 'position:fixed;inset:0;z-index:999999;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:center;';
+            modal.innerHTML = `
+                <div style="background:#1e293b;border:1px solid #ef4444;border-radius:16px;padding:28px;width:100%;max-width:440px;box-shadow:0 25px 50px rgba(0,0,0,0.5);">
+                    <div style="font-size:1.1rem;font-weight:700;color:#f87171;margin-bottom:4px;">🚫 Terminate Tenant</div>
+                    <div style="font-size:0.82rem;color:#94a3b8;margin-bottom:18px;"><b style="color:#f1f5f9;">${tenant.name}</b> — ${tenant.unit || tenant.propertyId || ''}</div>
+                    <div style="margin-bottom:12px;">
+                        <label style="font-size:0.8rem;color:#94a3b8;display:block;margin-bottom:6px;">Termination Reason *</label>
+                        <select id="terminate-reason-select" style="width:100%;padding:10px 12px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#f1f5f9;font-size:0.88rem;">
+                            <option value="">-- Select reason --</option>
+                            <option value="Contract Expired">📅 Contract Expired</option>
+                            <option value="Eviction - Non-payment">💸 Eviction — Non-payment of Rent</option>
+                            <option value="Eviction - Violation">⚠️ Eviction — Rule Violation</option>
+                            <option value="Tenant Requested Moveout">🚚 Tenant Requested Move-out</option>
+                            <option value="Property Sold">🏠 Property Sold</option>
+                            <option value="Property Renovation">🔨 Property Under Renovation</option>
+                            <option value="Other">📝 Other</option>
+                        </select>
+                    </div>
+                    <div style="margin-bottom:18px;">
+                        <label style="font-size:0.8rem;color:#94a3b8;display:block;margin-bottom:6px;">Additional Notes (optional)</label>
+                        <textarea id="terminate-notes-input" rows="2" style="width:100%;padding:10px 12px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#f1f5f9;font-size:0.88rem;resize:none;box-sizing:border-box;" placeholder="e.g. 3 months unpaid, moveout date April 1..."></textarea>
+                    </div>
+                    <div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:8px;padding:10px;font-size:0.8rem;color:#fca5a5;margin-bottom:18px;">
+                        ⚠️ This will mark the tenant as <b>Inactive</b> and set the property back to <b>Vacant</b>.
+                    </div>
+                    <div style="display:flex;gap:10px;justify-content:flex-end;">
+                        <button onclick="document.getElementById('prism-terminate-modal').remove()" style="padding:9px 20px;background:transparent;border:1px solid #334155;color:#94a3b8;border-radius:8px;cursor:pointer;font-size:0.85rem;">Cancel</button>
+                        <button id="terminate-confirm-btn" style="padding:9px 20px;background:linear-gradient(135deg,#ef4444,#dc2626);border:none;color:#fff;border-radius:8px;cursor:pointer;font-size:0.85rem;font-weight:600;">🚫 Confirm Terminate</button>
+                    </div>
+                </div>`;
+            document.body.appendChild(modal);
+            modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+
+            document.getElementById('terminate-confirm-btn').onclick = async () => {
+                const reason = document.getElementById('terminate-reason-select').value;
+                const notes  = document.getElementById('terminate-notes-input').value.trim();
+                if (!reason) {
+                    document.getElementById('terminate-reason-select').style.borderColor = '#ef4444';
+                    return;
+                }
+                const btn = document.getElementById('terminate-confirm-btn');
+                btn.textContent = 'Processing...'; btn.disabled = true;
+                try {
+                    tenant.status = 'inactive';
+                    tenant.terminatedAt = new Date().toISOString();
+                    tenant.terminationReason = reason;
+                    tenant.terminationNotes = notes || '';
+                    await dbUpdate('tenants', tenant);
+                    // Free up the property
+                    if (tenant.propertyId) {
+                        const prop = await dbGet('properties', tenant.propertyId);
+                        if (prop) { prop.status = 'vacant'; await dbUpdate('properties', prop); }
+                    }
+                    modal.remove();
+                    showToast('✅ Tenant terminated. Property is now vacant.', 'success');
+                    hideModal('tenant-detail-modal');
+                    await loadTenants(); await loadProperties(); await loadDashboard();
+                } catch(e) { showToast('❌ Error: ' + e.message, 'error'); btn.textContent = '🚫 Confirm Terminate'; btn.disabled = false; }
+            };
+        }
+
+        // ── FREEZE / REOPEN CREDIT ──────────────────────────────────────────
+        async function freezeCredit(id) {
+            const credit = await dbGet('credits', id);
+            if (!credit) return;
+
+            const isClosed = credit.status === 'closed';
+
+            if (isClosed) {
+                if (!confirm('Reopen this debt account?\n\n' + credit.debtor + '\n\nInterest will resume accruing.')) return;
+                credit.status = 'active';
+                credit.closedAt = null;
+                credit.closureReason = null;
+                await dbUpdate('credits', credit);
+                showToast('🔓 Debt account reopened.', 'success');
+                hideModal('credit-detail-modal');
+                await loadCredits(); await loadDashboard();
+                return;
+            }
+
+            // Freeze — show reason modal
+            const existing = document.getElementById('prism-freeze-modal');
+            if (existing) existing.remove();
+            const modal = document.createElement('div');
+            modal.id = 'prism-freeze-modal';
+            modal.style.cssText = 'position:fixed;inset:0;z-index:999999;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:center;';
+
+            // Calculate current balance for display
+            const allCreditPayments = await dbGetAll('creditPayments');
+            const paid = allCreditPayments.filter(p => p.creditId === id).reduce((s,p) => s+(p.amount||0), 0);
+            const balance = Math.max(0, credit.principal - paid);
+
+            modal.innerHTML = `
+                <div style="background:#1e293b;border:1px solid #f59e0b;border-radius:16px;padding:28px;width:100%;max-width:440px;box-shadow:0 25px 50px rgba(0,0,0,0.5);">
+                    <div style="font-size:1.1rem;font-weight:700;color:#fbbf24;margin-bottom:4px;">🔒 Close / Freeze Debt Account</div>
+                    <div style="font-size:0.82rem;color:#94a3b8;margin-bottom:6px;"><b style="color:#f1f5f9;">${credit.debtor}</b></div>
+                    <div style="font-size:0.82rem;color:#94a3b8;margin-bottom:18px;">Remaining Balance: <b style="color:#f87171;">₱${balance.toLocaleString()}</b></div>
+                    <div style="margin-bottom:12px;">
+                        <label style="font-size:0.8rem;color:#94a3b8;display:block;margin-bottom:6px;">Closure Reason *</label>
+                        <select id="freeze-reason-select" style="width:100%;padding:10px 12px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#f1f5f9;font-size:0.88rem;">
+                            <option value="">-- Select reason --</option>
+                            <option value="Fully Paid">✅ Fully Paid</option>
+                            <option value="Written Off - Bad Debt">❌ Written Off — Bad Debt</option>
+                            <option value="Settled - Partial Agreement">🤝 Settled — Partial Agreement</option>
+                            <option value="Deceased Debtor">🕊️ Deceased Debtor</option>
+                            <option value="Legal Action Filed">⚖️ Legal Action Filed</option>
+                            <option value="Stop Interest Only">⏸️ Stop Interest (keep balance)</option>
+                            <option value="Other">📝 Other</option>
+                        </select>
+                    </div>
+                    <div style="margin-bottom:18px;">
+                        <label style="font-size:0.8rem;color:#94a3b8;display:block;margin-bottom:6px;">Notes (optional)</label>
+                        <textarea id="freeze-notes-input" rows="2" style="width:100%;padding:10px 12px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#f1f5f9;font-size:0.88rem;resize:none;box-sizing:border-box;" placeholder="e.g. debtor agreed to pay ₱5,000 as final settlement..."></textarea>
+                    </div>
+                    <div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:8px;padding:10px;font-size:0.8rem;color:#fcd34d;margin-bottom:18px;">
+                        ⚠️ Interest will <b>stop accruing</b>. The account will be marked <b>Closed</b>. You can reopen it anytime.
+                    </div>
+                    <div style="display:flex;gap:10px;justify-content:flex-end;">
+                        <button onclick="document.getElementById('prism-freeze-modal').remove()" style="padding:9px 20px;background:transparent;border:1px solid #334155;color:#94a3b8;border-radius:8px;cursor:pointer;font-size:0.85rem;">Cancel</button>
+                        <button id="freeze-confirm-btn" style="padding:9px 20px;background:linear-gradient(135deg,#f59e0b,#d97706);border:none;color:#fff;border-radius:8px;cursor:pointer;font-size:0.85rem;font-weight:600;">🔒 Confirm Close</button>
+                    </div>
+                </div>`;
+            document.body.appendChild(modal);
+            modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+
+            document.getElementById('freeze-confirm-btn').onclick = async () => {
+                const reason = document.getElementById('freeze-reason-select').value;
+                const notes  = document.getElementById('freeze-notes-input').value.trim();
+                if (!reason) { document.getElementById('freeze-reason-select').style.borderColor = '#ef4444'; return; }
+                const btn = document.getElementById('freeze-confirm-btn');
+                btn.textContent = 'Saving...'; btn.disabled = true;
+                try {
+                    credit.status = 'closed';
+                    credit.closedAt = new Date().toISOString();
+                    credit.closureReason = reason;
+                    credit.closureNotes = notes || '';
+                    await dbUpdate('credits', credit);
+                    modal.remove();
+                    showToast('🔒 Debt account closed. Interest stopped.', 'success');
+                    hideModal('credit-detail-modal');
+                    await loadCredits(); await loadDashboard();
+                } catch(e) { showToast('❌ Error: ' + e.message, 'error'); btn.textContent = '🔒 Confirm Close'; btn.disabled = false; }
+            };
+        }
+
 
         async function deleteTenant(id) {
             if (currentAppUser && currentAppUser.role === 'cashier') {
@@ -12708,13 +12894,19 @@ async function loadWaterCustomers() {
             // Admin/Manager: full list, name + position only (no salary shown)
             container.innerHTML = employees.map(e => `
                 <div class="list-item" onclick="viewEmployeeDetails(${e.id})" style="cursor: pointer;">
-                    <div class="list-item-content">
+                    <div class="list-item-content" style="flex:1;min-width:0;">
                         <div class="list-item-title">👷 ${e.name}</div>
                         <div class="list-item-subtitle">${e.position || 'Staff'}</div>
                     </div>
-                    <div style="text-align: right;">
-                        ${e.unpaidDays > 0 ? `<div class="badge badge-primary" style="margin-bottom: 4px;">${e.unpaidDays} unpaid days</div>` : ''}
-                        ${e.unpaidAdvances > 0 ? `<div class="badge badge-warning">Advance pending</div>` : ''}
+                    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
+                        <div style="display:flex;gap:5px;">
+                            ${e.unpaidDays > 0 ? `<div class="badge badge-primary">${e.unpaidDays} unpaid</div>` : ''}
+                            ${e.unpaidAdvances > 0 ? `<div class="badge badge-warning">Advance</div>` : ''}
+                        </div>
+                        <div style="display:flex;gap:5px;" onclick="event.stopPropagation()">
+                            <button class="btn btn-sm" style="background:rgba(99,102,241,0.12);border:1px solid #6366f1;color:#818cf8;padding:3px 10px;font-size:0.75rem;border-radius:6px;" onclick="editEmployee(${e.id})">✏️ Edit</button>
+                            <button class="btn btn-sm" style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.4);color:#f87171;padding:3px 10px;font-size:0.75rem;border-radius:6px;" onclick="deleteEmployee(${e.id})">🗑️ Delete</button>
+                        </div>
                     </div>
                 </div>
             `).join('');
@@ -14576,6 +14768,7 @@ async function showPayrollSummary() {
                     <button class="btn btn-info" onclick="printCreditReport(${id})">🖨️ Print</button>
                     ${currentAppUser && currentAppUser.role !== 'cashier' ? `
                         <button class="btn btn-danger" onclick="deleteCredit(${id})">Delete Credit</button>
+                ${currentAppUser && currentAppUser.role !== 'cashier' ? `<button class="btn" style="background:${credit.status==='closed'?'rgba(16,185,129,0.12)':'rgba(239,68,68,0.12)'};border:1px solid ${credit.status==='closed'?'#10b981':'#ef4444'};color:${credit.status==='closed'?'#10b981':'#f87171'};padding:8px 16px;border-radius:8px;font-weight:600;cursor:pointer;" onclick="freezeCredit(${id})">${credit.status==='closed'?'🔓 Reopen Debt':'🔒 Close / Freeze Debt'}</button>` : ''}
                     ` : `
                         <button class="btn btn-primary" onclick="quickEndorse('credit', '💳 Credit account needs admin attention: ' + '${credit.debtor}' + ' — Balance: ₱' + balance.toLocaleString())">📋 Endorse to Admin</button>
                     `}
@@ -16659,6 +16852,7 @@ async function showPayrollSummary() {
             if (statTenants) statTenants.textContent = tenants.length;
             // Only count credits with remaining balance (active debtors)
             const activeDebtors = credits.filter(credit => {
+        if (credit.status === 'closed') return false; // closed/frozen — excluded from active debtors
                 const pmts = creditPayments.filter(p => p.creditId === credit.id);
                 const paid = pmts.reduce((s, p) => s + p.amount, 0);
                 let due = credit.principal;
@@ -18577,6 +18771,14 @@ Be direct, specific, and helpful. Use Philippine peso context. Keep total respon
                 console.log('[DeleteSample] Removed', _endorse.length - _realEndorse.length, 'sample endorsements');
             }
         } catch(e) {}
+        // Reset endorsement badge after sample delete
+        try {
+            const _aC2 = document.getElementById('admin-inbox-count');
+            const _remaining = JSON.parse(localStorage.getItem('prism_endorsements') || '[]').filter(e => !e.read).length;
+            if (_aC2) { _aC2.textContent = _remaining; _aC2.style.display = _remaining > 0 ? 'flex' : 'none'; }
+            const _inboxList = document.getElementById('admin-inbox-list');
+            if (_inboxList) { _inboxList.innerHTML = ''; }
+        } catch(e2) {}
                 showToast('✅ Done! ' + totalDeleted + ' sample records deleted. Reloading...', 'success');
 
                 // Step 7: Refresh UI from clean IndexedDB
@@ -18716,6 +18918,18 @@ async function clearAllData() {
 
         // Clear endorsements from localStorage
         localStorage.removeItem('prism_endorsements');
+        // Reset endorsement badge to 0 and close any open panel
+        try {
+            const _aCount = document.getElementById('admin-inbox-count');
+            const _eFab   = document.getElementById('admin-inbox-fab');
+            const _eDot   = document.getElementById('admin-inbox-dot');
+            if (_aCount) { _aCount.textContent = '0'; _aCount.style.display = 'none'; }
+            if (_eFab)   { _eFab.style.animation = ''; }
+            if (_eDot)   { _eDot.style.display = 'none'; }
+            // Close panel if open
+            const _panel = document.getElementById('cashier-endorse-panel') || document.getElementById('admin-inbox-panel');
+            if (_panel) { _panel.style.display = 'none'; _panel.innerHTML = ''; }
+        } catch(e2) {}
                 showToast('\u2705 All done.', 'success');
                 // Wait 3s for Firebase to fully propagate before refreshing UI
                 await new Promise(r => setTimeout(r, 3000));
@@ -24219,11 +24433,11 @@ async function editTask(id) {
                 if (existingEndorse.length === 0) {
                     const todayStr2 = today.toISOString().split('T')[0];
                     const sampleEndorse = [
-                        { id: 'end_1', type: 'sales', message: '🏠 Rent Payment Recorded:\n• Tenant: Juan Dela Cruz\n• Amount: ₱3,000\n• Method: Cash\n• Date: ' + todayStr2 + '\nRecorded by: Cenia Ellioso', from: 'cashier1', fromName: 'Cenia Ellioso', timestamp: new Date(today.getTime() - 2*60*60*1000).toISOString(), read: false , isSample: true },
-                        { id: 'end_2', type: 'water', message: '💧 Water Sale — CASH:\n• Customer: Aling Nena Store\n• Gallons: 5\n• Total: ₱125\n• Date: ' + todayStr2 + '\nRecorded by: Cenia Ellioso', from: 'cashier1', fromName: 'Cenia Ellioso', timestamp: new Date(today.getTime() - 1*60*60*1000).toISOString(), read: false , isSample: true },
-                        { id: 'end_3', type: 'credit', message: '💳 Loan Payment Recorded:\n• Borrower: Roberto Fernandez\n• Amount: ₱2,000\n• Date: ' + todayStr2 + '\nRecorded by: Roger Ellioso', from: 'cashier2', fromName: 'Roger Ellioso', timestamp: new Date(today.getTime() - 30*60*1000).toISOString(), read: false , isSample: true },
-                        { id: 'end_4', type: 'expense', message: '💸 Expense Recorded:\n• Description: Office Supplies\n• Amount: ₱350\n• Date: ' + todayStr2 + '\nRecorded by: Cenia Ellioso', from: 'cashier1', fromName: 'Cenia Ellioso', timestamp: new Date(today.getTime() - 3*60*60*1000).toISOString(), read: true , isSample: true },
-                        { id: 'end_5', type: 'income', message: '💰 Income Recorded:\n• Source: Parking Fee\n• Amount: ₱500\n• Date: ' + todayStr2 + '\nRecorded by: Roger Ellioso', from: 'cashier2', fromName: 'Roger Ellioso', timestamp: new Date(today.getTime() - 4*60*60*1000).toISOString(), read: true , isSample: true },
+                        { id: 'end_1', type: 'sales', message: '🏠 Rent Payment Recorded:\n• Tenant: Juan Dela Cruz\n• Amount: ₱3,000\n• Method: Cash\n• Date: ' + todayStr2 + '\nRecorded by: Cenia Ellioso', sentByRole: 'cashier', sentBy: 'Cenia Ellioso', sentAt: new Date(today.getTime() - 2*60*60*1000).toISOString(), read: false , isSample: true },
+                        { id: 'end_2', type: 'water', message: '💧 Water Sale — CASH:\n• Customer: Aling Nena Store\n• Gallons: 5\n• Total: ₱125\n• Date: ' + todayStr2 + '\nRecorded by: Cenia Ellioso', sentByRole: 'cashier', sentBy: 'Cenia Ellioso', sentAt: new Date(today.getTime() - 1*60*60*1000).toISOString(), read: false , isSample: true },
+                        { id: 'end_3', type: 'credit', message: '💳 Loan Payment Recorded:\n• Borrower: Roberto Fernandez\n• Amount: ₱2,000\n• Date: ' + todayStr2 + '\nRecorded by: Roger Ellioso', sentByRole: 'cashier', sentBy: 'Roger Ellioso', sentAt: new Date(today.getTime() - 30*60*1000).toISOString(), read: false , isSample: true },
+                        { id: 'end_4', type: 'expense', message: '💸 Expense Recorded:\n• Description: Office Supplies\n• Amount: ₱350\n• Date: ' + todayStr2 + '\nRecorded by: Cenia Ellioso', sentByRole: 'cashier', sentBy: 'Cenia Ellioso', sentAt: new Date(today.getTime() - 3*60*60*1000).toISOString(), read: true , isSample: true },
+                        { id: 'end_5', type: 'income', message: '💰 Income Recorded:\n• Source: Parking Fee\n• Amount: ₱500\n• Date: ' + todayStr2 + '\nRecorded by: Roger Ellioso', sentByRole: 'cashier', sentBy: 'Roger Ellioso', sentAt: new Date(today.getTime() - 4*60*60*1000).toISOString(), read: true , isSample: true },
                     ];
                     localStorage.setItem('prism_endorsements', JSON.stringify(sampleEndorse));
                 }
@@ -26271,7 +26485,7 @@ function renderSentEndorsements() {
         <div class="endorse-item ${e.type === 'urgent' ? 'urgent' : ''}">
             <div class="endorse-item-type">${typeIcons[e.type] || '📋'} ${e.type.toUpperCase()}</div>
             <div class="endorse-item-desc" style="font-size:0.82rem;white-space:pre-line;">${e.message.substring(0,120)}${e.message.length>120?'...':''}</div>
-            <div class="endorse-item-meta">${new Date(e.sentAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})} · ${e.read ? '✅ Seen by admin' : '⏳ Pending'}</div>
+            <div class="endorse-item-meta">${e.sentAt || e.timestamp ? new Date(e.sentAt || e.timestamp).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : ''} · ${e.read ? '✅ Seen by admin' : '⏳ Pending'}</div>
         </div>
     `).join('');
 }
@@ -26306,7 +26520,7 @@ function renderAdminInbox() {
             </div>
             <div class="endorse-item-desc" style="font-size:0.83rem;white-space:pre-line;margin:4px 0;">${e.message.substring(0,200)}${e.message.length>200?'...':''}</div>
             <div class="endorse-item-meta">
-                From: <b>${e.sentBy}</b> · ${new Date(e.sentAt).toLocaleString([], {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}
+                From: <b>${e.sentBy || e.fromName || 'Cashier'}</b> · ${e.sentAt || e.timestamp ? new Date(e.sentAt || e.timestamp).toLocaleString([], {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : ''}
             </div>
         </div>
     `).join('');
@@ -27507,20 +27721,60 @@ window.mtSAToggleOrgStatus=mtSAToggleOrgStatus;
             } catch(e){ mtToast('Error: '+e.message,'error'); }
         }
         async function mtSAEditUserEmail(docId, currentEmail) {
-            const newEmail = window.prompt('Edit email for user:\n\nCurrent: ' + currentEmail + '\n\nEnter new email:', currentEmail);
-            if (!newEmail || newEmail.trim() === currentEmail) return;
-            const trimmed = newEmail.trim().toLowerCase();
-            if (!trimmed.includes('@') || !trimmed.includes('.')) {
-                mtToast('❌ Invalid email address', 'error'); return;
-            }
-            try {
-                // Check duplicate
-                const snap = await window.db.collection(PRISM_SECURITY.COLLECTION).where('email','==',trimmed).get();
-                if (!snap.empty) { mtToast('⚠️ That email already exists', 'warning'); return; }
-                await window.db.collection(PRISM_SECURITY.COLLECTION).doc(docId).update({ email: trimmed });
-                mtToast('✅ Email updated to: ' + trimmed, 'success');
-                mtSALoadAllowlist();
-            } catch(e) { mtToast('❌ Error: ' + e.message, 'error'); }
+            // Build inline modal
+            const existing = document.getElementById('prism-edit-email-modal');
+            if (existing) existing.remove();
+
+            const modal = document.createElement('div');
+            modal.id = 'prism-edit-email-modal';
+            modal.style.cssText = 'position:fixed;inset:0;z-index:999999;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;';
+            modal.innerHTML = `
+                <div style="background:#1e293b;border:1px solid #334155;border-radius:16px;padding:32px 28px;width:100%;max-width:420px;box-shadow:0 25px 50px rgba(0,0,0,0.5);">
+                    <div style="font-size:1.1rem;font-weight:700;color:#f1f5f9;margin-bottom:6px;">✏️ Edit Email</div>
+                    <div style="font-size:0.8rem;color:#64748b;margin-bottom:18px;">Current: <span style="color:#94a3b8;">${currentEmail}</span></div>
+                    <input id="edit-email-input" type="email" value="${currentEmail}"
+                        style="width:100%;padding:10px 14px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#f1f5f9;font-size:0.9rem;outline:none;box-sizing:border-box;margin-bottom:18px;"
+                        placeholder="new@email.com" />
+                    <div style="display:flex;gap:10px;justify-content:flex-end;">
+                        <button onclick="document.getElementById('prism-edit-email-modal').remove()"
+                            style="padding:9px 20px;background:transparent;border:1px solid #334155;color:#94a3b8;border-radius:8px;cursor:pointer;font-size:0.85rem;">Cancel</button>
+                        <button id="edit-email-save-btn"
+                            style="padding:9px 20px;background:linear-gradient(135deg,#6366f1,#8b5cf6);border:none;color:#fff;border-radius:8px;cursor:pointer;font-size:0.85rem;font-weight:600;">Save</button>
+                    </div>
+                </div>`;
+            document.body.appendChild(modal);
+
+            // Focus input and select all
+            const inp = document.getElementById('edit-email-input');
+            setTimeout(() => { inp.focus(); inp.select(); }, 50);
+
+            // Close on backdrop click
+            modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+
+            // Save handler
+            document.getElementById('edit-email-save-btn').onclick = async () => {
+                const trimmed = (inp.value || '').trim().toLowerCase();
+                if (!trimmed || trimmed === currentEmail) { modal.remove(); return; }
+                if (!trimmed.includes('@') || !trimmed.includes('.')) {
+                    inp.style.borderColor = '#ef4444';
+                    inp.placeholder = 'Enter a valid email!';
+                    return;
+                }
+                const btn = document.getElementById('edit-email-save-btn');
+                btn.textContent = 'Saving...';
+                btn.disabled = true;
+                try {
+                    const snap = await window.db.collection(PRISM_SECURITY.COLLECTION).where('email','==',trimmed).get();
+                    if (!snap.empty) { mtToast('⚠️ That email already exists', 'warning'); btn.textContent='Save'; btn.disabled=false; return; }
+                    await window.db.collection(PRISM_SECURITY.COLLECTION).doc(docId).update({ email: trimmed });
+                    mtToast('✅ Email updated to: ' + trimmed, 'success');
+                    modal.remove();
+                    mtSALoadAllowlist();
+                } catch(e) { mtToast('❌ Error: ' + e.message, 'error'); btn.textContent='Save'; btn.disabled=false; }
+            };
+
+            // Enter key saves
+            inp.addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('edit-email-save-btn').click(); });
         }
         window.mtSAEditUserEmail = mtSAEditUserEmail;
 
