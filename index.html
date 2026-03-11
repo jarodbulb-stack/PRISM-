@@ -27252,17 +27252,16 @@ window.mtSAToggleOrgStatus=mtSAToggleOrgStatus;
             if (_origSyncToFirebase && !_origSyncToFirebase._req7guarded) {
                 window.syncToFirebase = async function(...args) {
                     // Always allow sync during wipe/delete operations
-                    // Also allow if MT org role is owner/admin (SA users may have stale currentAppUser)
                     if (window._prismWipeInProgress) return _origSyncToFirebase(...args);
+                    // Check MT role, localStorage role, AND currentAppUser role
                     const _mtRole = (typeof MT !== 'undefined' && MT.currentOrgRole) || null;
-                    // SA/Owner via MT always allowed regardless of currentAppUser
-                    if (_mtRole && ['owner','admin'].includes(_mtRole)) return _origSyncToFirebase(...args);
-                    const _role = currentAppUser?.role || _mtRole || 'viewer';
-                    if (['viewer','cashier'].includes(_role)) {
-                        console.info('[Security REQ7] Sync blocked for role:', _role);
-                        return;
-                    }
-                    return _origSyncToFirebase(...args);
+                    const _lsRole = localStorage.getItem('mt_current_org_role') || null;
+                    const _appRole = currentAppUser?.role || null;
+                    const _effectiveRole = _mtRole || _lsRole || _appRole || 'viewer';
+                    // Allow if any source says owner/admin/manager
+                    if (['owner','admin','manager'].includes(_effectiveRole)) return _origSyncToFirebase(...args);
+                    console.info('[Security REQ7] Sync blocked for role:', _effectiveRole);
+                    return;
                 };
                 window.syncToFirebase._req7guarded = true;
             }
