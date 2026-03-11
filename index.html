@@ -12918,7 +12918,7 @@ async function loadWaterCustomers() {
             } else {
                 empAdvances.slice(0, 6).forEach(a => {
                     const voidBtn = (!a.deducted && currentAppUser?.role === 'cashier')
-                        ? `<button class="btn btn-sm btn-danger" onclick="requestVoidAdvance(${a.id},'${employee.name.replace(/'/g,"\'")}',${a.amount})" style="font-size:0.7rem;padding:2px 8px;">🗑️ Void</button>`
+                        ? `<button class="btn btn-sm btn-danger" onclick="requestVoidAdvance(${a.id},'${employee.name}',${a.amount})" style="font-size:0.7rem;padding:2px 8px;">🗑️ Void</button>`
                         : (!a.deducted && (currentAppUser?.role === 'admin' || currentAppUser?.role === 'owner'))
                         ? `<button class="btn btn-sm btn-danger" onclick="deleteAdvance(${a.id})" style="font-size:0.7rem;padding:2px 8px;">🗑️</button>`
                         : '';
@@ -13290,7 +13290,7 @@ Enter reason:`);
                             <div style="font-weight:600;font-size:0.9rem;">${icon} ${emp}</div>
                             <div style="font-size:0.78rem;color:var(--text-secondary);">${r.date} • ${r.status}${r.otHours>0?' • OT:'+r.otHours+'h':''}</div>
                         </div>
-                        <button class="btn btn-sm btn-danger" onclick="adminDirectVoid('timeRecords',${r.id},'Attendance ${r.date} for ${emp}')" style="white-space:nowrap;padding:4px 10px;font-size:0.78rem;">🗑️ Void</button>
+                        <button class="btn btn-sm btn-danger" onclick="adminDirectVoid('timeRecords',${r.id},'Attendance record')" style="white-space:nowrap;padding:4px 10px;font-size:0.78rem;">🗑️ Void</button>
                     </div>`;
                 }).join('');
 
@@ -13309,7 +13309,7 @@ Enter reason:`);
                             <div style="font-weight:600;font-size:0.9rem;">💵 ${emp}</div>
                             <div style="font-size:0.78rem;color:var(--text-secondary);">${a.date} • ₱${(a.amount||0).toLocaleString()}${a.notes?' • '+a.notes:''}</div>
                         </div>
-                        <button class="btn btn-sm btn-danger" onclick="adminDirectVoid('cashAdvances',${a.id},'Cash Advance ₱${(a.amount||0).toLocaleString()} for ${emp}')" style="white-space:nowrap;padding:4px 10px;font-size:0.78rem;">🗑️ Void</button>
+                        <button class="btn btn-sm btn-danger" onclick="adminDirectVoid('cashAdvances',${a.id},'Cash advance')" style="white-space:nowrap;padding:4px 10px;font-size:0.78rem;">🗑️ Void</button>
                     </div>`;
                 }).join('');
 
@@ -13325,7 +13325,7 @@ Enter reason:`);
                             <div style="font-weight:600;font-size:0.9rem;">🏠 ${p.tenantName||'Tenant'}</div>
                             <div style="font-size:0.78rem;color:var(--text-secondary);">${p.date} • ₱${(p.amount||0).toLocaleString()} • ${p.type||'rent'}</div>
                         </div>
-                        <button class="btn btn-sm btn-danger" onclick="adminDirectVoid('payments',${p.id},'Payment ₱${(p.amount||0).toLocaleString()} from ${(p.tenantName||'Tenant').replace(/'/g,\'')}')" style="white-space:nowrap;padding:4px 10px;font-size:0.78rem;">🗑️ Void</button>
+                        <button class="btn btn-sm btn-danger" onclick="adminDirectVoid('payments',${p.id},'Rent payment')" style="white-space:nowrap;padding:4px 10px;font-size:0.78rem;">🗑️ Void</button>
                     </div>`;
                 }).join('');
 
@@ -13338,7 +13338,7 @@ Enter reason:`);
                 <span style="font-size:0.8rem;color:var(--text-secondary);">${pending.length} pending request${pending.length!==1?'s':''}</span>
             </div>
             <div style="display:flex;border-bottom:1px solid var(--border-color);margin-bottom:16px;overflow-x:auto;">
-                <button id="vt-0" style="${activeTabStyle}" onclick="switchVoidTab(0)">📩 Staff Requests ${pending.length>0?'<span style=\'background:#ef4444;color:white;border-radius:10px;padding:1px 7px;font-size:0.72rem;margin-left:4px;\'>' + pending.length + '</span>':''}</button>
+                <button id="vt-0" style="${activeTabStyle}" onclick="switchVoidTab(0)">📩 Staff Requests</button>
                 <button id="vt-1" style="${tabStyle}" onclick="switchVoidTab(1)">📅 Attendance</button>
                 <button id="vt-2" style="${tabStyle}" onclick="switchVoidTab(2)">💵 Advances</button>
                 <button id="vt-3" style="${tabStyle}" onclick="switchVoidTab(3)">🏠 Payments</button>
