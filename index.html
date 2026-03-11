@@ -17381,81 +17381,173 @@ async function showPayrollSummary() {
         // JAROD'S AI ANALYSIS
         // =====================
         async function jarodsAnalysis() {
-            const panel = document.getElementById('jarods-analysis-panel');
-            const textEl = document.getElementById('jarods-analysis-text');
+            const panel   = document.getElementById('jarods-analysis-panel');
+            const textEl  = document.getElementById('jarods-analysis-text');
             const loadingEl = document.getElementById('jarods-loading');
             if (!panel || !textEl) return;
 
-            // Toggle off if already open with content
-            if (panel.style.display !== 'none' && textEl.textContent.trim()) {
+            // Toggle off if already open
+            if (panel.style.display !== 'none' && textEl.innerHTML.trim()) {
                 panel.style.display = 'none';
                 return;
             }
 
             panel.style.display = 'block';
-            textEl.textContent = '';
-            loadingEl.style.display = 'inline';
+            textEl.innerHTML = '';
+            if (loadingEl) loadingEl.style.display = 'inline';
 
             const td = window._trendData;
-            if (!td) {
-                textEl.textContent = '⚠️ No trend data yet. Load the dashboard first.';
-                loadingEl.style.display = 'none';
+            if (!td || td.incomeData.every(v => v === 0) && td.expenseData.every(v => v === 0)) {
+                textEl.innerHTML = '<span style="color:#64748b;">⚠️ No financial data to analyze yet. Record some transactions first.</span>';
+                if (loadingEl) loadingEl.style.display = 'none';
                 return;
             }
 
-            // Build a data summary for the AI
-            const fmt = v => '₱' + v.toLocaleString('en-PH');
-            const rows = td.months.map((m,i) =>
-                `  ${m}: Income ${fmt(td.incomeData[i])}, Expenses ${fmt(td.expenseData[i])}, Net ${fmt(td.netData[i])}`
-            ).join('\n');
+            // ── Smart rule-based financial analysis (works offline, no CORS) ──
+            const fmt  = v => '₱' + v.toLocaleString('en-PH', {minimumFractionDigits:0});
+            const pct  = (a,b) => b === 0 ? '—' : (a/b*100).toFixed(1) + '%';
 
             const totalIncome  = td.incomeData.reduce((a,b)=>a+b,0);
             const totalExpense = td.expenseData.reduce((a,b)=>a+b,0);
             const totalNet     = totalIncome - totalExpense;
-            const bestMonth    = td.months[td.incomeData.indexOf(Math.max(...td.incomeData))];
-            const worstMonth   = td.months[td.netData.indexOf(Math.min(...td.netData))];
-            const trend        = td.netData[5] > td.netData[4] ? 'improving' : td.netData[5] < td.netData[4] ? 'declining' : 'stable';
+            const avgIncome    = totalIncome  / 6;
+            const avgExpense   = totalExpense / 6;
+            const profitMargin = totalIncome > 0 ? (totalNet / totalIncome * 100) : 0;
 
-            const prompt = `You are Jarod, a sharp and direct financial advisor for a small Philippine property and business management operation. Analyze this 6-month financial data and give actionable insights.
+            const bestIncomeIdx  = td.incomeData.indexOf(Math.max(...td.incomeData));
+            const worstNetIdx    = td.netData.indexOf(Math.min(...td.netData));
+            const bestMonth      = td.months[bestIncomeIdx];
+            const worstMonth     = td.months[worstNetIdx];
 
-DATA:
-${rows}
+            const recentNet      = td.netData.slice(-3);
+            const trend          = recentNet[2] > recentNet[0] ? 'improving' :
+                                   recentNet[2] < recentNet[0] ? 'declining' : 'stable';
 
-SUMMARY:
-- Total Income: ${fmt(totalIncome)}
-- Total Expenses: ${fmt(totalExpense)}
-- Net Cash Flow: ${fmt(totalNet)}
-- Best Income Month: ${bestMonth}
-- Worst Net Month: ${worstMonth}
-- Current Trend: ${trend}
+            const negativeMonths = td.netData.filter(v => v < 0).length;
+            const highExpRatio   = td.expenseData.filter((e,i) => td.incomeData[i] > 0 && e/td.incomeData[i] > 0.8).length;
+            const zeroIncomeMonths = td.incomeData.filter(v => v === 0).length;
 
-Give a concise analysis in 3 sections:
-1. 📊 Overall Health (2-3 sentences)
-2. ⚠️ Concerns (bullet points, be specific)
-3. 💡 Recommendations (bullet points, actionable for a small Philippine business)
+            const incomeGrowth = td.incomeData[0] > 0
+                ? ((td.incomeData[5] - td.incomeData[0]) / td.incomeData[0] * 100).toFixed(1)
+                : null;
+            const expenseGrowth = td.expenseData[0] > 0
+                ? ((td.expenseData[5] - td.expenseData[0]) / td.expenseData[0] * 100).toFixed(1)
+                : null;
 
-Be direct, specific, and helpful. Use Philippine peso context. Keep total response under 300 words.`;
+            // ── Section 1: Overall Health ──
+            let healthColor = totalNet >= 0 ? '#10b981' : '#ef4444';
+            let healthIcon  = totalNet > avgIncome * 0.3 ? '💚' : totalNet >= 0 ? '🟡' : '🔴';
+            let healthText  = '';
 
-            try {
-                const res = await fetch('https://api.anthropic.com/v1/messages', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        model: 'claude-sonnet-4-20250514',
-                        max_tokens: 600,
-                        messages: [{ role: 'user', content: prompt }]
-                    })
-                });
-                const data = await res.json();
-                const text = data.content?.[0]?.text || 'No response received.';
-                textEl.textContent = text;
-            } catch(e) {
-                textEl.textContent = '❌ Could not connect to Jarod. Check your connection.\nError: ' + e.message;
-            } finally {
-                loadingEl.style.display = 'none';
+            if (profitMargin >= 30) {
+                healthText = `Business is performing <b style="color:#10b981;">strongly</b> with a ${profitMargin.toFixed(1)}% profit margin over the last 6 months. Total net cash flow stands at <b style="color:${healthColor};">${fmt(totalNet)}</b>.`;
+            } else if (profitMargin >= 10) {
+                healthText = `Business is <b style="color:#f59e0b;">moderately profitable</b> with a ${profitMargin.toFixed(1)}% margin. Total income of ${fmt(totalIncome)} against expenses of ${fmt(totalExpense)} gives a net of <b style="color:${healthColor};">${fmt(totalNet)}</b>.`;
+            } else if (profitMargin >= 0) {
+                healthText = `Business is <b style="color:#f59e0b;">barely breaking even</b> — profit margin is only ${profitMargin.toFixed(1)}%. Income of ${fmt(totalIncome)} barely covers expenses of ${fmt(totalExpense)}.`;
+            } else {
+                healthText = `Business is <b style="color:#ef4444;">operating at a loss</b> with a net deficit of <b style="color:#ef4444;">${fmt(totalNet)}</b>. Total expenses (${fmt(totalExpense)}) exceed income (${fmt(totalIncome)}) by ${pct(Math.abs(totalNet), totalIncome)}.`;
             }
+
+            if (trend === 'improving') healthText += ` The trend is <b style="color:#10b981;">↑ improving</b> over the last 3 months.`;
+            else if (trend === 'declining') healthText += ` The trend is <b style="color:#ef4444;">↓ declining</b> over the last 3 months — needs attention.`;
+            else healthText += ` The trend has been <b>stable</b> recently.`;
+
+            // ── Section 2: Concerns ──
+            const concerns = [];
+
+            if (negativeMonths >= 3)
+                concerns.push(`<b>${negativeMonths} out of 6 months</b> had negative net cash flow — this is a recurring problem, not a one-time event.`);
+            else if (negativeMonths >= 1)
+                concerns.push(`<b>${negativeMonths} month(s)</b> ended with negative cash flow (worst: ${worstMonth} at ${fmt(td.netData[worstNetIdx])}).`);
+
+            if (highExpRatio >= 2)
+                concerns.push(`Expenses are consuming <b>over 80% of income</b> in ${highExpRatio} months — very little buffer for emergencies.`);
+
+            if (zeroIncomeMonths >= 2)
+                concerns.push(`<b>${zeroIncomeMonths} months</b> had zero recorded income — check if transactions were not recorded or if there were actual income gaps.`);
+
+            if (expenseGrowth !== null && parseFloat(expenseGrowth) > 20)
+                concerns.push(`Expenses have <b>grown ${expenseGrowth}%</b> from ${td.months[0]} to ${td.months[5]} — review what's driving this increase.`);
+
+            if (incomeGrowth !== null && parseFloat(incomeGrowth) < 0)
+                concerns.push(`Income has <b>dropped ${Math.abs(incomeGrowth)}%</b> since ${td.months[0]} — investigate causes (vacancies, non-payment, fewer sales?).`);
+
+            if (avgExpense > avgIncome * 0.7 && avgExpense > 0)
+                concerns.push(`Average monthly expenses (${fmt(avgExpense)}) are <b>${pct(avgExpense, avgIncome)}</b> of average income (${fmt(avgIncome)}) — leaving thin margins.`);
+
+            if (concerns.length === 0)
+                concerns.push(`No major concerns detected. Continue monitoring monthly to catch issues early.`);
+
+            // ── Section 3: Recommendations ──
+            const recs = [];
+
+            if (profitMargin < 20 && avgIncome > 0)
+                recs.push(`Target a <b>20–30% profit margin</b>. You need to either increase income by ~${fmt(avgExpense * 0.25)} or cut monthly expenses by that amount.`);
+
+            if (negativeMonths >= 1)
+                recs.push(`Review expenses in loss months. Categorize which expenses were <b>unavoidable vs. reducible</b> and build a monthly spending limit.`);
+
+            if (zeroIncomeMonths >= 1)
+                recs.push(`<b>Record all transactions consistently</b> — even small daily income. Gaps in recording make it hard to spot real trends.`);
+
+            if (trend === 'declining')
+                recs.push(`Declining trend: consider <b>collecting overdue rent/loans</b>, adding a new income stream, or reducing discretionary expenses this month.`);
+
+            if (bestMonth)
+                recs.push(`Study what made <b>${bestMonth}</b> your best income month and replicate those conditions (full occupancy, active collections, water sales).`);
+
+            recs.push(`Aim to build a <b>cash reserve of 2–3 months</b> of expenses (${fmt(avgExpense * 2)}–${fmt(avgExpense * 3)}) as an emergency buffer.`);
+
+            if (totalIncome > 0 && profitMargin > 25)
+                recs.push(`Good profitability — consider <b>reinvesting surplus</b> into property improvements or expanding rental units.`);
+
+            // ── Render ──
+            const rows = td.months.map((m,i) =>
+                `<tr style="border-bottom:1px solid rgba(148,163,184,0.08);">
+                    <td style="padding:4px 8px;color:#94a3b8;font-size:0.78rem;">${m}</td>
+                    <td style="padding:4px 8px;color:#10b981;font-size:0.78rem;text-align:right;">${fmt(td.incomeData[i])}</td>
+                    <td style="padding:4px 8px;color:#ef4444;font-size:0.78rem;text-align:right;">${fmt(td.expenseData[i])}</td>
+                    <td style="padding:4px 8px;font-size:0.78rem;text-align:right;color:${td.netData[i]>=0?'#3b82f6':'#f59e0b'};">${fmt(td.netData[i])}</td>
+                </tr>`
+            ).join('');
+
+            textEl.innerHTML = `
+                <table style="width:100%;border-collapse:collapse;margin-bottom:16px;background:rgba(0,0,0,0.2);border-radius:8px;overflow:hidden;">
+                    <thead><tr style="background:rgba(99,102,241,0.1);">
+                        <th style="padding:5px 8px;color:#64748b;font-size:0.72rem;text-align:left;font-weight:600;">MONTH</th>
+                        <th style="padding:5px 8px;color:#10b981;font-size:0.72rem;text-align:right;font-weight:600;">INCOME</th>
+                        <th style="padding:5px 8px;color:#ef4444;font-size:0.72rem;text-align:right;font-weight:600;">EXPENSES</th>
+                        <th style="padding:5px 8px;color:#3b82f6;font-size:0.72rem;text-align:right;font-weight:600;">NET</th>
+                    </tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+
+                <div style="margin-bottom:14px;">
+                    <div style="font-weight:700;color:#f1f5f9;margin-bottom:6px;font-size:0.88rem;">${healthIcon} Overall Health</div>
+                    <div style="font-size:0.83rem;color:#cbd5e1;line-height:1.6;">${healthText}</div>
+                </div>
+
+                <div style="margin-bottom:14px;">
+                    <div style="font-weight:700;color:#fbbf24;margin-bottom:6px;font-size:0.88rem;">⚠️ Concerns</div>
+                    <ul style="margin:0;padding-left:18px;font-size:0.83rem;color:#cbd5e1;line-height:1.8;">
+                        ${concerns.map(c=>`<li>${c}</li>`).join('')}
+                    </ul>
+                </div>
+
+                <div>
+                    <div style="font-weight:700;color:#34d399;margin-bottom:6px;font-size:0.88rem;">💡 Recommendations</div>
+                    <ul style="margin:0;padding-left:18px;font-size:0.83rem;color:#cbd5e1;line-height:1.8;">
+                        ${recs.map(r=>`<li>${r}</li>`).join('')}
+                    </ul>
+                </div>
+
+                <div style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(148,163,184,0.1);font-size:0.72rem;color:#475569;">
+                    Analysis based on 6-month data · ${new Date().toLocaleDateString('en-PH',{month:'long',year:'numeric'})}
+                </div>`;
+
+            if (loadingEl) loadingEl.style.display = 'none';
         }
-        window.jarodsAnalysis = jarodsAnalysis;
 
 
         // Helper function for ordinal suffix
@@ -18765,7 +18857,7 @@ Be direct, specific, and helpful. Use Philippine peso context. Keep total respon
         // Clear sample endorsements from localStorage
         try {
             const _endorse = JSON.parse(localStorage.getItem('prism_endorsements') || '[]');
-            const _realEndorse = _endorse.filter(e => e.isSample !== true);
+            const _realEndorse = _endorse.filter(e => e.isSample !== true)  // keep ALL non-sample endorsements;
             localStorage.setItem('prism_endorsements', JSON.stringify(_realEndorse));
             if (_endorse.length !== _realEndorse.length) {
                 console.log('[DeleteSample] Removed', _endorse.length - _realEndorse.length, 'sample endorsements');
@@ -18778,6 +18870,8 @@ Be direct, specific, and helpful. Use Philippine peso context. Keep total respon
             if (_aC2) { _aC2.textContent = _remaining; _aC2.style.display = _remaining > 0 ? 'flex' : 'none'; }
             const _inboxList = document.getElementById('admin-inbox-list');
             if (_inboxList) { _inboxList.innerHTML = ''; }
+            const _panel2 = document.getElementById('admin-inbox-panel');
+            if (_panel2 && _panel2.classList.contains('open')) _panel2.classList.remove('open');
         } catch(e2) {}
                 showToast('✅ Done! ' + totalDeleted + ' sample records deleted. Reloading...', 'success');
 
@@ -18929,6 +19023,9 @@ async function clearAllData() {
             // Close panel if open
             const _panel = document.getElementById('cashier-endorse-panel') || document.getElementById('admin-inbox-panel');
             if (_panel) { _panel.style.display = 'none'; _panel.innerHTML = ''; }
+            if (_inboxList2) _inboxList2.innerHTML = '<div style="text-align:center;color:#475569;font-size:0.85rem;padding:20px;">No endorsements</div>';
+            const _inboxList2 = document.getElementById('admin-inbox-list');
+            if (_panel && _panel.classList.contains('open')) { _panel.classList.remove('open'); }
         } catch(e2) {}
                 showToast('\u2705 All done.', 'success');
                 // Wait 3s for Firebase to fully propagate before refreshing UI
@@ -24530,6 +24627,20 @@ async function editTask(id) {
                 // Initialize database - uses org-specific name if MT active
                 await initDB();
 
+        // ── Startup: purge stale sample endorsements from localStorage ──
+        try {
+            const _rawEndorse = JSON.parse(localStorage.getItem('prism_endorsements') || '[]');
+            const _cleanEndorse = _rawEndorse.filter(e =>
+                e.isSample !== true              // only remove sample-tagged endorsements
+
+            );
+            if (_cleanEndorse.length !== _rawEndorse.length) {
+                localStorage.setItem('prism_endorsements', JSON.stringify(_cleanEndorse));
+                console.log('[Startup] Purged', _rawEndorse.length - _cleanEndorse.length, 'stale endorsements');
+            }
+        } catch(e2) {}
+
+
                 // Initialize Guardian system (health check, auto-backup)
                 const guardianResult = await PrismGuardian.initialize();
                 
@@ -26490,43 +26601,65 @@ function renderSentEndorsements() {
     `).join('');
 }
 
-function renderAdminInbox() {
-    const list = getEndorsements();
-    let filtered = list.filter(e =>
-        e.orgId === (MT.currentOrg?.id || 'local') || !e.orgId
-    );
+        function renderAdminInbox() {
+            const list = getEndorsements();
+            let filtered = list.filter(e =>
+                e.orgId === (MT.currentOrg?.id || 'local') || !e.orgId
+            );
 
-    if (inboxFilter === 'unread') filtered = filtered.filter(e => !e.read);
-    if (inboxFilter === 'urgent') filtered = filtered.filter(e => e.type === 'urgent');
+            if (inboxFilter === 'unread') filtered = filtered.filter(e => !e.read);
+            if (inboxFilter === 'urgent') filtered = filtered.filter(e => e.type === 'urgent');
 
-    filtered = [...filtered].reverse();
+            filtered = [...filtered].reverse();
 
-    const container = document.getElementById('admin-inbox-list');
-    if (!container) return;
+            const container = document.getElementById('admin-inbox-list');
+            if (!container) return;
 
-    if (filtered.length === 0) {
-        container.innerHTML = '<div style="text-align:center;color:var(--text-secondary);font-size:0.85rem;padding:20px;">No endorsements found</div>';
-        return;
-    }
+            if (filtered.length === 0) {
+                container.innerHTML = '<div style="text-align:center;color:var(--text-secondary);font-size:0.85rem;padding:20px;">No endorsements</div>';
+                updateEndorseUnreadBadge();
+                return;
+            }
 
-    const typeIcons = { sales:'💰', credit:'💳', expense:'🧾', water:'💧', attendance:'👷', urgent:'🚨' };
-    container.innerHTML = filtered.map(e => `
-        <div class="endorse-item ${e.type === 'urgent' ? 'urgent' : ''} ${!e.read ? 'endorse-unread' : ''}"
-             onclick="markEndorseRead('${e.id}')"
-             style="${!e.read ? 'border-left-width:4px;' : 'opacity:0.75;'}">
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-                <div class="endorse-item-type">${typeIcons[e.type] || '📋'} ${e.type.toUpperCase()}</div>
-                ${!e.read ? '<span style="background:#ef4444;color:white;font-size:0.65rem;padding:2px 7px;border-radius:10px;font-weight:700;">NEW</span>' : ''}
-            </div>
-            <div class="endorse-item-desc" style="font-size:0.83rem;white-space:pre-line;margin:4px 0;">${e.message.substring(0,200)}${e.message.length>200?'...':''}</div>
-            <div class="endorse-item-meta">
-                From: <b>${e.sentBy || e.fromName || 'Cashier'}</b> · ${e.sentAt || e.timestamp ? new Date(e.sentAt || e.timestamp).toLocaleString([], {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : ''}
-            </div>
-        </div>
-    `).join('');
+            const typeIcons = { sales:'💰', credit:'💳', expense:'🧾', water:'💧', attendance:'👷', urgent:'🚨' };
+            const isSampleLabel = e => e.isSample ? '<span style="background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.3);color:#fbbf24;font-size:0.62rem;padding:1px 6px;border-radius:8px;margin-left:6px;">SAMPLE</span>' : '';
 
-    updateEndorseUnreadBadge();
-}
+            container.innerHTML = filtered.map(e => `
+                <div class="endorse-item ${e.type === 'urgent' ? 'urgent' : ''} ${!e.read ? 'endorse-unread' : ''}"
+                    style="${!e.read ? 'border-left-width:4px;' : 'opacity:0.85;'}position:relative;">
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                        <div style="display:flex;align-items:center;gap:4px;flex:1;min-width:0;">
+                            <div class="endorse-item-type" style="cursor:pointer;" onclick="markEndorseRead('${e.id}')">${typeIcons[e.type] || '📋'} ${e.type.toUpperCase()}${isSampleLabel(e)}</div>
+                            ${!e.read ? '<span style="background:#ef4444;color:white;font-size:0.62rem;padding:2px 7px;border-radius:10px;white-space:nowrap;">NEW</span>' : ''}
+                        </div>
+                        <button onclick="deleteEndorsement('${e.id}')" title="Delete"
+                            style="background:transparent;border:none;color:#475569;cursor:pointer;font-size:1rem;padding:2px 6px;border-radius:4px;line-height:1;flex-shrink:0;"
+                            onmouseover="this.style.color='#ef4444';this.style.background='rgba(239,68,68,0.1)'"
+                            onmouseout="this.style.color='#475569';this.style.background='transparent'">🗑️</button>
+                    </div>
+                    <div class="endorse-item-desc" onclick="markEndorseRead('${e.id}')" style="font-size:0.83rem;white-space:pre-line;margin:4px 0;cursor:pointer;">${e.message.substring(0,300)}${e.message.length>300?'…':''}</div>
+                    <div class="endorse-item-meta">
+                        From: <b>${e.sentBy || e.fromName || 'Cashier'}</b> · ${e.sentAt || e.timestamp ? new Date(e.sentAt || e.timestamp).toLocaleString([], {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : ''}
+                    </div>
+                </div>
+            `).join('');
+
+            updateEndorseUnreadBadge();
+        }
+
+        function deleteEndorsement(id) {
+            const list = getEndorsements();
+            const item = list.find(e => e.id === id);
+            if (!item) return;
+            const label = item.isSample ? 'sample endorsement' : 'this endorsement';
+            if (!confirm('Delete ' + label + '?\n\nThis cannot be undone.')) return;
+            const updated = list.filter(e => e.id !== id);
+            saveEndorsements(updated);
+            renderAdminInbox();
+            updateEndorseUnreadBadge();
+            showToast('🗑️ Endorsement deleted.', 'success');
+        }
+        window.deleteEndorsement = deleteEndorsement;
 
 function markEndorseRead(id) {
     const list = getEndorsements();
