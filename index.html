@@ -14975,8 +14975,8 @@ async function showPayrollSummary() {
                     photo: notePhotoData || null,
                     createdAt: new Date().toISOString(),
                     // Reminder fields (only meaningful for category='reminder')
-                    reminderTime: (category === 'reminder' || category === 'general') ? reminderTime : null,
-                    repeat:       (category === 'reminder' || category === 'general') ? repeat : 'none',
+                    reminderTime: category === 'reminder' ? reminderTime : null,
+                    repeat:       category === 'reminder' ? repeat : 'none',
                     dismissed:    false,  // reset dismissed on save/edit
                 };
 
@@ -15008,7 +15008,7 @@ async function showPayrollSummary() {
         function prismToggleReminderFields(category) {
             const el = document.getElementById('reminder-extra-fields');
             if (!el) return;
-            if ((category === 'reminder' || category === 'general')) {
+            if (category === 'reminder') {
                 el.classList.remove('reminder-hidden');
             } else {
                 el.classList.add('reminder-hidden');
@@ -15051,7 +15051,7 @@ async function showPayrollSummary() {
                 if (!db || !db.objectStoreNames.contains('customNotes')) return;
                 const notes = await dbGetAll('customNotes');
                 const reminders = (notes || []).filter(n =>
-                    n.(category === 'reminder' || category === 'general') && prismIsReminderDueToday(n)
+                    n.category === 'reminder' && prismIsReminderDueToday(n)
                 );
 
                 // Also include recurring tasks due today (not completed)
@@ -15187,12 +15187,12 @@ async function showPayrollSummary() {
 
                 // Update stats
                 document.getElementById('stat-notes-total').textContent = allNotesData.length;
-                document.getElementById('stat-notes-reminders').textContent = allNotesData.filter(n => n.(category === 'reminder' || category === 'general')).length;
+                document.getElementById('stat-notes-reminders').textContent = allNotesData.filter(n => n.category === 'reminder').length;
                 
                 // Update category counts in Quick Add section
                 const clientCount = allNotesData.filter(n => n.category === 'client').length;
                 const areaCount = allNotesData.filter(n => n.category === 'area').length;
-                const reminderCount = allNotesData.filter(n => n.(category === 'reminder' || category === 'general')).length;
+                const reminderCount = allNotesData.filter(n => n.category === 'reminder').length;
                 const generalCount = allNotesData.filter(n => n.category === 'general').length;
                 
                 if (document.getElementById('stat-notes-client')) {
@@ -15327,7 +15327,7 @@ async function showPayrollSummary() {
                      <div>No ${info.label.toLowerCase()} yet.</div>
                    </div>`
                 : filtered.map(n => {
-                    const isOverdue = n.(category === 'reminder' || category === 'general') && n.reminderDate && n.reminderDate < today;
+                    const isOverdue = n.category === 'reminder' && n.reminderDate && n.reminderDate < today;
                     const catColor = categoryBadgeColors[n.category] || '#6366f1';
                     return `
                     <div style="background:var(--bg-primary);border:1px solid var(--border-color);border-radius:10px;padding:14px;margin-bottom:10px;cursor:pointer;${isOverdue ? 'border-left:4px solid #ef4444;' : ''}"
@@ -15498,7 +15498,7 @@ async function showPayrollSummary() {
             document.getElementById('note-date').value = note.date;
             // Restore reminder fields
             prismToggleReminderFields(note.category);
-            if (note.(category === 'reminder' || category === 'general')) {
+            if (note.category === 'reminder') {
                 const rtEl = document.getElementById('note-reminder-time');
                 const rpEl = document.getElementById('note-repeat');
                 if (rtEl) rtEl.value = note.reminderTime || '08:00';
@@ -17234,7 +17234,7 @@ async function showPayrollSummary() {
                 if (!note.date) return;
                 const origin = new Date(note.date + 'T00:00:00');
                 if (isNaN(origin)) return;
-                const isReminder = note.(category === 'reminder' || category === 'general');
+                const isReminder = note.category === 'reminder';
                 const repeat = (note.repeat || 'none');
 
                 // Determine which days in the viewed month this note falls on
@@ -17560,7 +17560,7 @@ async function showPayrollSummary() {
                 try { await dbClear('clientCharges'); } catch (e) {}
                 // Ask about personal reminders before deleting
                 const notes = await dbGetAll('customNotes').catch(()=>[]);
-                const reminders = (notes||[]).filter(n => n.(category === 'reminder' || category === 'general'));
+                const reminders = (notes||[]).filter(n => n.category === 'reminder');
                 if (reminders.length > 0) {
                     const keepReminders = await showConfirm(
                         `You have ${reminders.length} personal reminder${reminders.length>1?'s':''} (SSS, bills, etc.)\n\nDo you want to KEEP your reminders?`,
@@ -20206,7 +20206,7 @@ Lender/Manager
                     titleText = '📝 Notes & Reminders';
                     sectionName = 'notes';
                     const allNotes = await dbGetAll('customNotes');
-                    const remNotes = allNotes.filter(n => n.(category === 'reminder' || category === 'general'));
+                    const remNotes = allNotes.filter(n => n.category === 'reminder');
                     html = `
                         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">
                             <div style="background:rgba(99,102,241,0.15);border-radius:8px;padding:10px;text-align:center;">
