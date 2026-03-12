@@ -13384,7 +13384,7 @@ Enter reason:`);
             if (!await showConfirm(`Void this record?\n\n"${label}"\n\nThis cannot be undone.`, 'danger', 'Confirm Void')) return;
             try {
                 await dbDelete(store, id);
-                showToast(\`✅ Voided: \${label}\`, 'success');
+                showToast(`Voided: ${label}`, 'success');
                 // Refresh the modal
                 document.querySelector('.void-modal-wrap')?.remove();
                 loadDashboard();
