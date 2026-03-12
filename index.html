@@ -2,25 +2,36 @@
 <html lang="en">
 <head>
 
-<!-- PRISM STABILITY PATCH (auto-injected) -->
+<!-- ===== PRISM STABILITY PATCH (Jarod rebuild) ===== -->
 <script>
-// Prevent missing globals from crashing modules
 window.currentAppUser = window.currentAppUser || null;
 window.currentFlashcardType = window.currentFlashcardType || null;
 
-// Stub for demo login if referenced
-if (typeof window.mtDemoLogin !== 'function') {
+if (typeof window.mtDemoLogin !== "function") {
     window.mtDemoLogin = function(){
-        console.warn("[PRISM] Demo login disabled.");
+        console.warn("[PRISM] Demo login placeholder executed.");
     };
 }
 
-// Runtime guard so one module error doesn't freeze the UI
-window.addEventListener('error', function(e){
+window.addEventListener("error", function(e){
     console.warn("[PRISM runtime warning]", e.message);
 });
+
+window.waitForFirebase = function(callback){
+    const check = () => {
+        if (window.firebase && firebase.apps && firebase.apps.length){
+            try{
+                window.db = firebase.firestore();
+            }catch(e){}
+            callback && callback();
+        } else {
+            setTimeout(check,50);
+        }
+    };
+    check();
+};
 </script>
-<!-- END PRISM STABILITY PATCH -->
+<!-- ===== END STABILITY PATCH ===== -->
 
     <meta charset="UTF-8">
     <!-- CSP handled at server level via Firebase/GitHub Pages headers -->
