@@ -28851,10 +28851,8 @@ async function clearAllData() {
             } else {
                 showToast('💸 Partial payment ₱'+amt.toLocaleString()+' recorded. Balance: ₱'+remaining.toLocaleString(),'info');
             }
-            await loadPayables();
-            loadExpenses(); loadDashboard();
-            try { await syncToFirebase(); } catch(err) { debouncedSync();
-                prismFullRefresh('payable', {skipCalendar: true}); }
+            prismFullRefresh('payable', {skipCalendar: true});
+            try { await syncToFirebase(); } catch(err) { debouncedSync(); }
         }
         window.confirmPayablePayment = confirmPayablePayment;
 
