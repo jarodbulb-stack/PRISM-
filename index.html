@@ -9340,10 +9340,22 @@ try{if(firebase.firestore&&firebase.firestore.persistentLocalCache){firestore.se
                     console.warn('[Sync] IDB may not be ready. Will retry in 3s...');
                     window._syncInProgress = false;
                     updateSyncStatus('synced');
-                    // Retry once after delay
-                    setTimeout(() => {
-                        if (typeof syncToFirebase === 'function') syncToFirebase();
-                    }, 3000);
+                    // Retry after waiting for _idb to be available
+                    const _retryWait = async () => {
+                        // Wait up to 10s for _idb
+                        let _waited = 0;
+                        while (!window._idb && _waited < 10000) {
+                            await new Promise(r => setTimeout(r, 200));
+                            _waited += 200;
+                        }
+                        if (window._idb) {
+                            console.log('[Sync] IDB now ready, retrying push...');
+                            syncToFirebase();
+                        } else {
+                            console.warn('[Sync] IDB still not ready after 10s — giving up retry');
+                        }
+                    };
+                    _retryWait();
                     return;
                 }
 
@@ -10408,6 +10420,7 @@ try{if(firebase.firestore&&firebase.firestore.persistentLocalCache){firestore.se
         // Ensure database is open and ready
         async function ensureDB() {
             if (db && dbReady) {
+                window._idb = db; // ensure _idb is always in sync
                 return db;
             }
             return await initDB();
@@ -10633,6 +10646,7 @@ try{if(firebase.firestore&&firebase.firestore.persistentLocalCache){firestore.se
 
         async function dbGetAll(storeName) {
             await ensureDB();
+            if (db && !window._idb) window._idb = db; // keep _idb in sync
             return new Promise((resolve, reject) => {
                 try {
                     const tx = db.transaction(storeName, 'readonly');
